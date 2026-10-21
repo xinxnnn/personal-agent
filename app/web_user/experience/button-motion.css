@@ -1,0 +1,63 @@
+/* Shared, lightweight feedback for login and workspace controls. */
+button {
+  position: relative;
+  isolation: isolate;
+  transition: transform 180ms ease, box-shadow 180ms ease,
+    background-color 180ms ease, border-color 180ms ease, opacity 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .primary:hover:not(:disabled), .secondary:hover:not(:disabled),
+  .light:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px #315c4c20;
+  }
+  .scenarios button:hover:not(:disabled) {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 24px #315c4c12;
+    border-color: #bdcdb5;
+  }
+  nav button:hover:not(:disabled) { background-color: #edf2eb; }
+  .text-button:hover:not(:disabled), #toggle-password:hover { background-color: #edf2eb; }
+  .login-submit:hover:not(:disabled) span, .light:hover:not(:disabled) span {
+    transform: translateX(4px);
+  }
+}
+.login-submit span, .light span {
+  display: inline-block;
+  transition: transform 180ms ease;
+}
+button:active:not(:disabled) {
+  transform: translateY(1px) scale(.975);
+  box-shadow: none;
+  transition-duration: 70ms;
+}
+button:disabled { transform: none; box-shadow: none; }
+.button-ripple-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+.button-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: #648b6430;
+  transform: scale(0);
+  opacity: .8;
+  animation: button-ripple-out 520ms cubic-bezier(.2,.6,.3,1) forwards;
+}
+.primary .button-ripple { background: #ffffff38; }
+@keyframes button-ripple-out {
+  to { transform: scale(1); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button, .login-submit span, .light span { transition: none !important; }
+  button:hover:not(:disabled), button:active:not(:disabled),
+  .login-submit:hover:not(:disabled) span, .light:hover:not(:disabled) span {
+    transform: none !important;
+  }
+  .button-ripple-layer { display: none; }
+}

@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 · Agent Provider 控制台</title>
+<style>
+/* ============================================================
+   AP 登录页 — 与 User 端 login.html 同构
+   左：品牌欢迎区（米绿渐变 + 几何装饰）
+   右：登录表单区
+   ============================================================ */
+
+:root {
+  /* 品牌色（User 端同款墨绿系统） */
+  --primary: #315c4c;
+  --primary-hover: #274a3d;
+  --primary-soft: #edf2eb;
+  --primary-ink: #2f5545;
+  --primary-border: #dbe5d3;
+
+  /* 中性色 */
+  --ink: #253632;
+  --muted: #7a8580;
+  --muted-2: #9aa79a;
+  --border: #e4e9df;
+  --bg: #f3f5ef;
+
+  /* 语义色 */
+  --danger: #ad5e4f;
+  --danger-soft: #fff4ee;
+  --danger-border: #f3d8c8;
+
+  /* 圆角 */
+  --radius-shell: 24px;
+  --radius-btn: 8px;
+  --radius-sm: 8px;
+
+  --font-sans: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+
+  --shadow-shell: 0 24px 80px #344b3910;
+  --shadow-btn: 0 3px 8px #315c4c13;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 外壳 ---------- */
+
+.login-page {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 40px;
+  background:
+    radial-gradient(ellipse at 20% 20%, #e5eddc99, transparent 55%),
+    radial-gradient(ellipse at 90% 90%, #edf1e2, transparent 50%),
+    var(--bg);
+}
+
+.login-shell {
+  width: min(1080px, 100%);
+  min-height: 660px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-shell);
+  overflow: hidden;
+  box-shadow: var(--shadow-shell);
+  animation: welcome-enter 700ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+/* ---------- 左：欢迎区 ---------- */
+
+.welcome {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, #fff 65%, #f9fbf6);
+  padding: 42px 45px;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: 3px;
+  color: var(--primary-ink);
+  text-decoration: none;
+  z-index: 1;
+}
+.brand small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.brand-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  display: inline-grid;
+  place-items: center;
+  background: linear-gradient(125deg, #3c6855, #2f5545);
+  color: #fff;
+  font-size: 22px;
+  letter-spacing: 0;
+  font-weight: 700;
+  box-shadow: 0 5px 14px #315c4c20;
+}
+
+.welcome-copy {
+  position: relative;
+  z-index: 1;
+  margin-top: 68px;
+}
+.welcome-copy .eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: #83917f !important;
+  font-weight: 600;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+.welcome-copy h1 {
+  font-size: 34px;
+  line-height: 1.55;
+  letter-spacing: 1px;
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.welcome-copy > p:last-child {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #788570;
+  margin: 0;
+}
+
+/* 产品能力小列表（新增） */
+.welcome-points {
+  list-style: none;
+  padding: 0;
+  margin: 22px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+.welcome-points li {
+  font-size: 12.5px;
+  color: #6f7d6a;
+  padding-left: 16px;
+  position: relative;
+}
+.welcome-points li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #95b18a;
+}
+
+.welcome-foot {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  padding-top: 120px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #75876b;
+}
+.green-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #759778;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* 装饰几何图形 */
+.welcome-art {
+  position: absolute;
+  width: 330px;
+  height: 285px;
+  right: -30px;
+  bottom: 45px;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse, #d2deba66, transparent 67%);
+  pointer-events: none;
+}
+.welcome-orb {
+  width: 150px;
+  height: 150px;
+  display: grid;
+  place-items: center;
+  border-radius: 43%;
+  transform: rotate(-13deg);
+  background: linear-gradient(130deg, #fffff0, #c2d4ac 60%, #96ae82);
+  box-shadow: inset 6px 8px 18px #ffffffb0, 12px 25px 38px #6b825323;
+  color: #fffce2;
+  font-size: 105px;
+  line-height: 1;
+  text-shadow: 3px 7px 4px #6d845b22;
+  animation: orb-float 7s ease-in-out infinite;
+}
+.welcome-ring {
+  position: absolute;
+  border: 1px solid #b6c99d88;
+  border-radius: 50%;
+  width: 310px;
+  height: 185px;
+  transform: rotate(-32deg);
+  animation: ring-orbit 38s linear infinite;
+}
+.ring-two {
+  width: 235px;
+  height: 260px;
+  border-style: dashed;
+  transform: rotate(30deg);
+  animation-duration: 49s;
+  animation-direction: reverse;
+}
+.spark {
+  position: absolute;
+  color: #98ad7f;
+  font-size: 26px;
+  animation: twinkle 5s ease-in-out infinite;
+}
+.spark-one { top: 37px; left: 55px; }
+.spark-two { bottom: 44px; right: 48px; font-size: 19px; animation-delay: -2.5s; }
+
+/* ---------- 右：登录区 ---------- */
+
+.login-side {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 65px 55px 90px;
+  background: linear-gradient(145deg, #fff 65%, #f9fbf6);
+}
+
+.login-content {
+  width: 100%;
+  max-width: 340px;
+  animation: welcome-enter 800ms 100ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.login-kicker {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #8a9982;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #f0f5ea;
+  border: 1px solid #e2eadb;
+  display: inline-block;
+}
+
+.login-content h2 {
+  font-size: 28px;
+  letter-spacing: 1px;
+  margin: 14px 0 10px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.login-description {
+  color: #899187;
+  font-size: 12.5px;
+  margin: 0 0 30px;
+}
+
+/* 表单 */
+.login-content label {
+  display: block;
+  font-size: 12px;
+  margin: 20px 0 8px;
+  color: #52634f;
+  font-weight: 550;
+}
+
+.login-content input {
+  width: 100%;
+  height: 48px;
+  padding: 12px 15px;
+  font: inherit;
+  font-size: 13px;
+  background: #fafbf8;
+  border: 1px solid #e0e6da;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+}
+.login-content input::placeholder { color: #a0a99a; }
+.login-content input:hover { border-color: #d5dccc; }
+.login-content input:focus {
+  background-color: #fff;
+  border-color: #95b18a;
+  box-shadow: 0 0 0 4px #9cb68a1c;
+}
+
+.password-field { position: relative; }
+.password-field input { padding-right: 49px; }
+.password-field button {
+  position: absolute;
+  right: 5px; top: 5px;
+  width: 39px; height: 39px;
+  display: grid; place-items: center;
+  background: none;
+  color: #8b9983;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+.password-field button:hover { background: #edf2eb; color: var(--primary-ink); }
+
+/* 错误提示 */
+#login-error {
+  min-height: 24px;
+  margin: 12px 0 6px;
+  font-size: 12px;
+  color: var(--danger);
+  transition: padding 200ms ease, background 200ms ease;
+}
+#login-error:not(:empty) {
+  padding: 9px 12px;
+  background: var(--danger-soft);
+  border-radius: 7px;
+  border-left: 3px solid #d8a082;
+  animation: message-enter 240ms ease-out;
+}
+
+/* 提交按钮 */
+.login-submit {
+  width: 100%;
+  height: 48px;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 19px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(125deg, #3c6855, #2f5545);
+  border: 1px solid #2f55451a;
+  border-radius: var(--radius-btn);
+  box-shadow: var(--shadow-btn);
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+.login-submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px #315c4c25;
+  background: linear-gradient(125deg, #355c4b, #274a3d);
+}
+.login-submit:active:not(:disabled) {
+  transform: translateY(1px) scale(.985);
+  box-shadow: none;
+  transition-duration: 70ms;
+}
+.login-submit:disabled { opacity: .65; cursor: not-allowed; }
+.login-submit span {
+  font-size: 18px;
+  transition: transform 180ms ease;
+}
+.login-submit:hover:not(:disabled) span { transform: translateX(4px); }
+.login-submit:focus-visible {
+  outline: 3px solid #a3bf96;
+  outline-offset: 3px;
+}
+
+/* busy 状态小转圈 */
+.login-submit[aria-busy="true"]::after {
+  content: '';
+  width: 15px; height: 15px;
+  border: 2px solid #ffffff55;
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 850ms linear infinite;
+}
+
+.login-help {
+  text-align: center;
+  font-size: 11px;
+  color: #9ca594;
+  margin: 22px 0 0;
+}
+
+.login-footer {
+  position: absolute;
+  bottom: 26px;
+  left: 15px; right: 15px;
+  text-align: center;
+  font-size: 10px;
+  color: #a4ad9d;
+  margin: 0;
+}
+
+/* ---------- 动画 ---------- */
+
+@keyframes welcome-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes message-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes orb-float {
+  0%, 100% { transform: translateY(0) rotate(-13deg); }
+  50%      { transform: translateY(-10px) rotate(-7deg); }
+}
+@keyframes ring-orbit {
+  from { transform: rotate(-32deg); }
+  to   { transform: rotate(328deg); }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: .45; transform: scale(.9); }
+  50%      { opacity: .9;  transform: scale(1.08); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 760px) {
+  .login-page { padding: 20px; }
+  .login-shell {
+    grid-template-columns: 1fr;
+    max-width: 470px;
+    min-height: 0;
+    border-radius: 18px;
+  }
+  .welcome {
+    padding: 27px 30px;
+    min-height: 205px;
+  }
+  .welcome-copy { margin-top: 22px; }
+  .welcome-copy .eyebrow,
+  .welcome-copy > p:last-child,
+  .welcome-points,
+  .welcome-foot { display: none; }
+  .welcome-copy h1 { font-size: 24px; line-height: 1.5; margin: 0; }
+  .welcome-art {
+    width: 180px; height: 170px;
+    right: -8px; bottom: -22px;
+    opacity: .65;
+  }
+  .welcome-orb { width: 85px; height: 85px; font-size: 62px; }
+  .welcome-ring { width: 170px; height: 105px; }
+  .ring-two { width: 130px; height: 145px; }
+  .spark { display: none; }
+  .login-side { padding: 33px 30px 72px; }
+  .login-content { max-width: none; }
+  .login-content h2 { font-size: 26px; margin-top: 8px; }
+  .login-description { margin-bottom: 23px; }
+  .login-footer { bottom: 21px; }
+  .login-content label { margin-top: 17px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .login-submit:hover:not(:disabled) { transform: none; }
+  .login-submit:hover:not(:disabled) span { transform: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="login-page">
+  <div class="login-shell">
+
+    <!-- ============ 左：欢迎区 ============ -->
+    <section class="welcome" aria-label="品牌欢迎">
+      <a class="brand" href="/ap/login">
+        <span class="brand-icon">A</span>
+        <span>
+          Agent Provider
+          <small>AP CONSOLE</small>
+        </span>
+      </a>
+
+      <div class="welcome-copy">
+        <p class="eyebrow">ISSUE · TRUST · DELIVER</p>
+        <h1>签发可信身份，<br>交付智能伙伴。</h1>
+        <p>管理智能体能力、签发记录与开发者信息，<br>让每一份 PA 都有据可查。</p>
+
+        <ul class="welcome-points">
+          <li>统一管理智能体能力清单</li>
+          <li>查询历史签发与恢复记录</li>
+          <li>集中维护开发者信息</li>
+        </ul>
+      </div>
+
+      <div class="welcome-art" aria-hidden="true">
+        <div class="welcome-ring ring-one"></div>
+        <div class="welcome-ring ring-two"></div>
+        <div class="welcome-orb">✳</div>
+        <span class="spark spark-one">✧</span>
+        <span class="spark spark-two">✧</span>
+      </div>
+
+      <div class="welcome-foot">
+        <span class="green-dot"></span> 以可信身份，连接智能生活
+      </div>
+    </section>
+
+    <!-- ============ 右：登录区 ============ -->
+    <section class="login-side" aria-labelledby="login-title">
+      <div class="login-content">
+        <span class="login-kicker">Agent Provider</span>
+        <h2 id="login-title">欢迎回来</h2>
+        <p class="login-description">登录 Agent Provider 控制台，管理智能体能力、签发记录与开发者信息。</p>
+
+        <form id="login-form" autocomplete="on">
+          <label for="username">账号</label>
+          <input id="username" name="username" type="text"
+                 placeholder="请输入账号" autocomplete="username"
+                 autofocus maxlength="128" required>
+
+          <label for="password">密码</label>
+          <div class="password-field">
+            <input id="password" name="password" type="password"
+                   placeholder="请输入密码" autocomplete="current-password" required>
+            <button type="button" id="toggle-password"
+                    aria-label="显示密码" aria-pressed="false">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none"
+                   stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+
+          <p id="login-error" role="alert" aria-live="polite"></p>
+
+          <button type="submit" class="login-submit" id="submit">
+            进入控制台 <span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <p class="login-help">使用 AP 管理员账号登录</p>
+      </div>
+
+      <p class="login-footer">Agent Provider Console</p>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  var LOGIN_URL = "/v1/ap/login";
+  var HOME_URL  = "/ap";
+
+  var form      = document.getElementById('login-form');
+  var userEl    = document.getElementById('username');
+  var pwdEl     = document.getElementById('password');
+  var btn       = document.getElementById('submit');
+  var errBox    = document.getElementById('login-error');
+  var toggle    = document.getElementById('toggle-password');
+
+  /* ?next= 回跳，挡开放重定向 */
+  var params = new URLSearchParams(location.search);
+  var next   = params.get('next') || '';
+  if (!next || next.charAt(0) !== '/' || next.indexOf('//') === 0) {
+    next = HOME_URL;
+  }
+
+  /* 密码可见切换 */
+  toggle.addEventListener('click', function () {
+    var shown = pwdEl.type === 'text';
+    pwdEl.type = shown ? 'password' : 'text';
+    toggle.setAttribute('aria-pressed', String(!shown));
+    toggle.setAttribute('aria-label', shown ? '显示密码' : '隐藏密码');
+    pwdEl.focus();
+  });
+
+  function showError(msg) { errBox.textContent = msg; }
+  function clearError()   { errBox.textContent = ''; }
+
+  [userEl, pwdEl].forEach(function (el) {
+    el.addEventListener('input', clearError);
+  });
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var u = userEl.value.trim();
+    var p = pwdEl.value;
+
+    if (!u) { showError('请输入账号'); userEl.focus(); return; }
+    if (!p) { showError('请输入密码'); pwdEl.focus(); return; }
+
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.firstChild.nodeValue = '登录中 ';
+    clearError();
+
+    try {
+      var r = await fetch(LOGIN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username: u, password: p })
+      });
+
+      if (r.ok) {
+        btn.firstChild.nodeValue = '登录成功，正在进入 ';
+        location.replace(next);
+        return;
+      }
+
+      var msg = '登录失败，请重试';
+      if (r.status === 401) {
+        msg = '账号或密码错误';
+      } else {
+        try {
+          var d = await r.json();
+          if (d && (d.detail === 'unauthorized')) msg = '登录状态异常，请重试';
+          else if (d && typeof d.detail === 'string' && d.detail !== 'invalid_credentials') msg = d.detail;
+        } catch (_) {}
+      }
+      showError(msg);
+    } catch (err) {
+      showError('无法连接服务，请确认后端已启动');
+    } finally {
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      btn.firstChild.nodeValue = '进入控制台 ';
+    }
+  });
+})();
+</script>
+</body>
+</html>

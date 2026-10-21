@@ -1,0 +1,2 @@
+# Install into the User service environment for local Octopus ANP group routing.
+-e ./anp-proxy

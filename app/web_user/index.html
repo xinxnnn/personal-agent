@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>智契化身 · 用户控制台</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js"
+      }
+    }
+  </script>
+  <style>
+    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;margin:0;background:#f4f7fb;color:#1f2937}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    const app = document.getElementById('app');
+    try {
+      const [Vue, { default: ElementPlus }, { loadModule }] = await Promise.all([
+        import('https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js'),
+        import('https://unpkg.com/element-plus/dist/index.full.mjs'),
+        import('https://unpkg.com/vue3-sfc-loader/dist/vue3-sfc-loader.esm.js')
+      ]);
+      const options = {
+        moduleCache: { vue: Vue },
+        getFile(url) { return fetch(url).then(r => r.ok ? r.text() : Promise.reject(r)); },
+        addStyle(textContent) { const style = document.createElement('style'); style.textContent = textContent; document.head.appendChild(style); }
+      };
+      // ?v= 由服务端替换成静态目录的 mtime 版本号：改动即失效，未改动则走缓存。
+      // 比 Date.now() 每刷新一次都全量重下 108KB 更省，也不会拿到旧副本。
+      const App = await loadModule('/user/static/UserApp.vue?v=__ASSET_V__', options);
+      Vue.createApp(App).use(ElementPlus).mount('#app');
+    } catch (error) {
+      console.error('用户控制台依赖加载失败：', error);
+      app.innerHTML = `
+        <main style="max-width:640px;margin:12vh auto;padding:32px;font-family:system-ui,'Microsoft YaHei',sans-serif;color:#1f2937;background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 12px 40px #1f29371a">
+          <h1 style="font-size:24px">页面组件未能加载</h1>
+          <p style="line-height:1.7">用户控制台需要从网络 CDN 加载 Vue 和 Element Plus。当前浏览器无法连接这些资源，因此主界面暂时无法显示。</p>
+          <p style="line-height:1.7">你可以打开不依赖 CDN 的本地简版工作台继续使用：</p>
+          <a href="/user/static/experience/index.html" style="display:inline-block;padding:11px 18px;background:#276c56;color:#fff;text-decoration:none;border-radius:8px">打开本地工作台</a>
+        </main>`;
+    }
+  </script>
+</body>
+</html>

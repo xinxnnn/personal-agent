@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智契化身 · 身份审核</title>
+  <!-- ?v= 由服务端替换为静态目录 mtime 版本号：资源一改 URL 就变，杜绝旧缓存 -->
+  <link rel="stylesheet" href="/tp/static/tp_console.css?v=__ASSET_V__" />
+</head>
+<body>
+  <!-- 全宽吸顶白条：与 User / AP 同构（徽标 + 系统名 | 用户胶囊 + 主操作） -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">契</div>
+        <div class="brand-text">
+          <h1>智契化身</h1>
+          <p>身份审核管理端</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="user-chip">
+          <span class="user-chip-avatar" aria-hidden="true">T</span>
+          <div class="user-chip-meta">
+            <span class="user-chip-name" id="userName">—</span>
+            <span class="user-chip-role" id="userRole">—</span>
+          </div>
+          <button class="chip-logout" id="logoutBtn" type="button" title="退出登录" aria-label="退出登录">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </div>
+        <button id="refreshBtn" class="primary-btn">刷新</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <!-- 统计区：AP 端 stats-grid 同款，四个申请状态指标。置于导航上方，全局常驻 -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">待审核申请</div>
+        <div id="statPending" class="stat-value">-</div>
+        <div class="stat-desc">等待人工审核</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">已签发</div>
+        <div id="statIssued" class="stat-value">-</div>
+        <div class="stat-desc">身份审核已通过</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">已拒绝</div>
+        <div id="statRejected" class="stat-value">-</div>
+        <div class="stat-desc">人工审核未通过</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">申请总数</div>
+        <div id="statTotal" class="stat-value">-</div>
+        <div class="stat-desc">含全部状态的历史申请</div>
+      </div>
+    </section>
+
+    <!-- 视图导航：胶囊 tab 行，与 AP 端 tabs 同款 -->
+    <nav class="view-tabs">
+      <button class="nav-btn active" data-view="review">申领审核</button>
+      <button class="nav-btn" data-view="deletions">删除审核</button>
+      <button class="nav-btn" data-view="trace">身份追溯</button>
+    </nav>
+
+    <section id="alert" class="alert hidden"></section>
+
+    <section id="view-review" class="view active">
+      <section class="panel review-overview" aria-label="申请状态分布">
+        <div class="panel-header"><div><h2>审核概况</h2><p>申请状态来自当前审核记录</p></div></div>
+        <div class="status-bars" id="applicationBars" aria-live="polite">正在读取申请数据…</div>
+      </section>
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>待审核申请</h2>
+            <p>查看申领人的姓名、联系信息和申请时间，选择记录后审核。</p>
+          </div>
+          <span id="pendingCount" class="badge">0</span>
+        </div>
+        <div id="pendingList" class="list empty">暂无数据</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>申请详情</h2>
+            <p>先核对申领资料与检查结果，技术信息可在下方展开。</p>
+          </div>
+          <span id="detailStatus" class="badge muted">未选择</span>
+        </div>
+        <div id="detailBox" class="detail empty">请选择一条申请</div>
+      </section>
+      
+    <section id="application-history" class="review-history">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>申请历史</h2>
+            <p>按状态查看化身申领记录。</p>
+          </div>
+          <div class="segmented">
+            <button class="filter active" data-status="">全部</button>
+            <button class="filter" data-status="pending">待审核</button>
+            <button class="filter" data-status="issued">已签发</button>
+            <button class="filter" data-status="rejected">已拒绝</button>
+          </div>
+        </div>
+        <div id="historyList" class="list empty">暂无数据</div>
+      </section>
+    </section>
+    </section>
+
+    <section id="view-deletions" class="view">
+      <section class="panel">
+        <div class="panel-header"><div><h2>智能体删除审核</h2><p>核对智能体名称、申请人和删除原因。批准后由用户端执行归档删除。</p></div><button id="refreshDeletions" class="ghost-btn" type="button">刷新申请</button></div>
+        <div id="deletionStats" class="deletion-stats" aria-live="polite"></div>
+        <div id="deletionQueue" class="deletion-queue"></div>
+      </section>
+    </section>
+
+    <section id="view-trace" class="view">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>身份追溯</h2>
+            <p>输入 DID 查询身份、核验已签发的凭证，也可查看系统公钥。</p>
+          </div>
+        </div>
+        <div class="trace-tabs" role="tablist" aria-label="追溯方式">
+          <button type="button" class="trace-tab active" data-trace="identity" role="tab" aria-selected="true">按 DID 查身份</button>
+          <button type="button" class="trace-tab" data-trace="credential" role="tab" aria-selected="false">核验身份凭证</button>
+          <button type="button" class="trace-tab" data-trace="keys" role="tab" aria-selected="false">查看公钥参数</button>
+        </div>
+      </section>
+      <section class="panel trace-workspace" data-trace-panel="identity" role="tabpanel">
+        <div class="panel-header">
+          <div>
+            <h2>根据 DID 查询</h2>
+            <p>输入完整 DID，查看 TP 保存的身份关联信息。</p>
+          </div>
+        </div>
+        <label for="revealDid">DID</label>
+        <div class="inline"><input id="revealDid" placeholder="did:agent:..." autocomplete="off" spellcheck="false" /><button id="revealBtn" class="primary-btn" type="button">查询身份</button></div>
+        <p id="revealStatus" class="trace-status" role="status">输入 DID 后开始查询。</p>
+        <div id="revealSummary" class="trace-summary" hidden></div>
+        <details id="revealRaw" class="technical-details" hidden><summary>查看完整返回数据</summary><pre id="revealResult" class="json-box"></pre></details>
+      </section>
+      <section class="panel trace-workspace" data-trace-panel="credential" role="tabpanel" hidden>
+        <div class="panel-header">
+          <div>
+            <h2>核验身份凭证</h2>
+            <p>粘贴完整的 PHC JSON，检查凭证结构和签名。</p>
+          </div>
+        </div>
+        <label for="phcInput">PHC JSON</label>
+        <textarea id="phcInput" placeholder='{"ASO":...}' spellcheck="false"></textarea>
+        <div class="actions"><button id="verifyBtn" class="primary-btn" type="button">核验凭证</button><button id="clearPhcBtn" class="ghost-btn" type="button">清空输入</button></div>
+        <p id="verifyStatus" class="trace-status" role="status">等待核验。</p>
+        <pre id="verifyResult" class="json-box" hidden></pre>
+      </section>
+      <section class="panel trace-workspace" data-trace-panel="keys" role="tabpanel" hidden>
+        <div class="panel-header"><div><h2>系统公钥参数</h2><p>用于核对 TP 当前对外提供的公钥信息。</p></div><button id="keysBtn" class="ghost-btn" type="button">刷新公钥</button></div>
+        <p id="keysStatus" class="trace-status" role="status">点击刷新公钥读取当前参数。</p>
+        <pre id="keysResult" class="json-box" hidden></pre>
+      </section>
+    </section>
+  </div>
+
+  <script src="/tp/static/tp_console.js?v=__ASSET_V__" defer></script>
+<script src="/tp/static/deletions.js?v=__ASSET_V__" defer></script></body>
+</html>

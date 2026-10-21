@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>最小化Vue测试</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    .success { color: #67c23a; }
+    .error { color: #f56c6c; }
+    .section { margin: 1rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1 class="success">🧪 最小化Vue测试</h1>
+  
+  <div class="section" id="status">
+    <h2>加载状态：</h2>
+    <p id="status-text">正在加载依赖...</p>
+  </div>
+  
+  <div class="section" id="app">
+    <h2>Vue应用测试区域</h2>
+    <p v-if="loaded">✅ Vue加载成功！</p>
+    <p>计数器: {{ count }}</p>
+    <el-button @click="count++">点击增加</el-button>
+  </div>
+  
+  <script>
+    let loadStatus = document.getElementById('status-text');
+    
+    function logStatus(msg) {
+      loadStatus.textContent = msg;
+      console.log(msg);
+    }
+    
+    logStatus('正在加载 Vue...');
+    
+    // 加载 Vue
+    let vueScript = document.createElement('script');
+    vueScript.src = 'https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js';
+    vueScript.onload = function() {
+      logStatus('Vue 加载完成，正在加载 Element Plus...');
+      loadElementPlus();
+    };
+    vueScript.onerror = function() {
+      loadStatus.innerHTML = '<span class="error">❌ Vue 加载失败，请检查网络</span>';
+    };
+    document.head.appendChild(vueScript);
+    
+    function loadElementPlus() {
+      let elScript = document.createElement('script');
+      elScript.src = 'https://cdn.jsdelivr.net/npm/element-plus@2.6.3/dist/index.full.min.js';
+      elScript.onload = function() {
+        logStatus('Element Plus 加载完成，正在初始化应用...');
+        initApp();
+      };
+      elScript.onerror = function() {
+        loadStatus.innerHTML = '<span class="error">❌ Element Plus 加载失败，请检查网络</span>';
+      };
+      document.head.appendChild(elScript);
+    }
+    
+    function initApp() {
+      try {
+        const { createApp, ref } = Vue;
+        const app = createApp({
+          setup() {
+            const count = ref(0);
+            const loaded = ref(true);
+            return { count, loaded };
+          }
+        });
+        app.use(ElementPlus);
+        app.mount('#app');
+        logStatus('✅ 所有组件加载完成!');
+        console.log('App mounted');
+      } catch (e) {
+        console.error(e);
+        loadStatus.innerHTML = '<span class="error">❌ 初始化失败: ' + e.message + '</span>';
+      }
+    }
+  </script>
+</body>
+</html>

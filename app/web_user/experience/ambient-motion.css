@@ -1,0 +1,156 @@
+/* Slow, quiet motion shared by the welcome screen and workspace illustration. */
+/* Visual refinements only: no application state or interaction handlers. */
+:root { --surface-shadow: 0 4px 22px #2b493407; }
+body { background-image: radial-gradient(ellipse at 95% 0%, #e6eddf65, transparent 48%); }
+::selection { background: #cbdcc2; color: #254631; }
+.sidebar { background: linear-gradient(180deg, #fff, #fafcf8); }
+.brand-icon { box-shadow: 0 5px 14px #315c4c20; }
+nav button { border: 1px solid transparent; }
+nav button.active { background: linear-gradient(110deg, #e4edde, #f1f5ec); border-color: #dae5d3; box-shadow: 0 3px 9px #315c4c07; }
+nav button.active::before { content: ''; position: absolute; left: -8px; top: 26%; bottom: 26%; width: 3px; border-radius: 5px; background: #66835c; }
+main > header { position: relative; }
+.header-tag { background: #ffffff9c; }
+.heading .eyebrow { color: #758e6a !important; }
+.hero { border: 1px solid #e1e8d8; box-shadow: inset 0 1px 0 #ffffffa0, 0 12px 34px #46643d07; background-image: linear-gradient(115deg, #ecf0e5, #e5ecdc); }
+.float-tag { backdrop-filter: blur(8px); box-shadow: 0 8px 20px #526b3f0c; }
+.pill { background: #ffffff40; }
+.panel, .stats article, .scenarios button { box-shadow: var(--surface-shadow); }
+.panel, .stats article, .child-card { transition: border-color 220ms ease, box-shadow 220ms ease, background-color 220ms ease; }
+.panel:focus-within { border-color: #b5cbaa; box-shadow: 0 0 0 3px #b5cbaa13, var(--surface-shadow); }
+.stats article { position: relative; overflow: hidden; }
+.stats article::after { content: ''; position: absolute; right: -20px; top: -25px; width: 85px; height: 85px; background: radial-gradient(circle, #e3ecdc80, transparent 70%); pointer-events: none; }
+.stats b { letter-spacing: -.4px; }
+.empty { background: radial-gradient(ellipse at 50% 15%, #f1f6ea90, transparent 62%), #fff; }
+.empty-icon { border: 1px solid #e2ead9; box-shadow: inset 0 1px 0 #fff; }
+.primary { background: linear-gradient(125deg, #3c6855, #2f5545); border: 1px solid #2f55451a; box-shadow: 0 3px 8px #315c4c13; }
+.primary:disabled { box-shadow: none; }
+.secondary { background: linear-gradient(120deg, #f2f6ee, #eaf0e4); }
+.primary:focus-visible, .secondary:focus-visible, summary:focus-visible { outline: 3px solid #a3bf96; outline-offset: 4px; }
+label { transition: color 180ms ease; }
+label:focus-within { color: #315c4c; }
+input:not([type=checkbox]), select { transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease; }
+input:not([type=checkbox]):focus, select:focus { background: #fff; border-color: #9ab38d; box-shadow: 0 0 0 4px #94af8014; outline-width: 1px; }
+input::placeholder { color: #a0a99a; }
+input[type=checkbox] { width: 16px; height: 16px; flex-shrink: 0; cursor: pointer; }
+.capability-row label { border: 1px solid transparent; cursor: pointer; transition: background-color 180ms, border-color 180ms, box-shadow 180ms; }
+.capability-row label:has(input:checked) { background: #e8f0e1; border-color: #b7cda9; color: #355c36; box-shadow: inset 0 1px 0 #ffffff9e; }
+.capability-row label:has(input:disabled) { cursor: default; opacity: .7; }
+.upload { transition: background-color 200ms, border-color 200ms; }
+input[type=file]::file-selector-button { border: 1px solid #d0deca; background: #fff; color: #496a40; border-radius: 6px; padding: 8px 13px; margin-right: 12px; font: inherit; cursor: pointer; }
+details > summary { padding: 12px 14px; border: 1px solid #e2e9dc; border-radius: 8px; background: #f7f9f3; color: #466540; transition: background-color 180ms, border-color 180ms; cursor: pointer; }
+details[open] > summary { background: #edf3e7; border-color: #cbdcc0; margin-bottom: 14px; }
+details[open] > form { animation: surface-enter 240ms ease-out; }
+.steps span { border-radius: 3px 3px 0 0; transition: border-color 220ms, color 220ms, background-color 220ms; }
+.steps span.done { background: linear-gradient(180deg, #e9f0e160, transparent); }
+.page:not([hidden]) { animation: surface-enter 320ms cubic-bezier(.2,.7,.3,1); }
+#notice { backdrop-filter: blur(12px); background: #eaf2e4f5; border-left: 4px solid #83a170; animation: notice-enter 230ms ease-out; }
+#notice.error { border-left-color: #c38665; }
+.login-page { background-image: radial-gradient(ellipse at 20% 20%, #e5eddc99, transparent 55%), radial-gradient(ellipse at 90% 90%, #edf1e2, transparent 50%); }
+.login-shell { box-shadow: 0 30px 90px #32472c12, 0 2px 8px #32472c05; }
+.login-side { background: linear-gradient(145deg, #fff 65%, #f9fbf6); }
+.login-content .login-kicker { padding: 4px 10px; border-radius: 20px; background: #f0f5ea; border: 1px solid #e2eadb; font-size: 10px; }
+.login-content #login-error:not(:empty) { padding: 9px 12px; background: #fff4ee; border-radius: 7px; border-left: 3px solid #d8a082; }
+@media (hover: hover) and (pointer: fine) {
+  .panel:hover, .stats article:hover, .child-card:hover { border-color: #cdddc3; box-shadow: 0 7px 25px #315c4c0b; }
+  .scenarios button:hover .scenario-icon { transform: translateY(-2px) rotate(-6deg); }
+  .scenario-icon { transition: transform 220ms ease; }
+  .upload:hover { background: #f0f5e9; border-color: #9db78c; }
+  .capability-row label:hover { border-color: #c5d6b9; }
+  details > summary:hover { background: #edf3e7; border-color: #bdcfb1; }
+  a.primary:hover { transform: translateY(-2px); box-shadow: 0 7px 18px #315c4c25; }
+}
+@keyframes surface-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes notice-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 720px) {
+  nav button.active::before { left: 22%; right: 22%; top: auto; bottom: 1px; width: auto; height: 2px; }
+  button, a.primary, details > summary { min-height: 42px; }
+  .runtime-actions > * { flex-grow: 1; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page:not([hidden]), details[open] > form, #notice { animation: none; }
+  .panel, .stats article, .child-card, label, input, select, .capability-row label,
+  .upload, details > summary, .steps span, .scenario-icon { transition: none !important; }
+  .scenarios button:hover .scenario-icon, a.primary:hover { transform: none; }
+}
+.orbit-art, .welcome-art { --float-distance: -10px; }
+.orb, .welcome-orb { animation: companion-float 7s ease-in-out infinite; }
+.orb span { display: block; animation: companion-star 32s linear infinite; }
+.orbit, .welcome-ring { animation: companion-orbit 38s linear infinite; }
+.o1 { --orbit-angle: -33deg; }
+.o2 { --orbit-angle: 38deg; animation-duration: 49s; animation-direction: reverse; }
+.ring-one { --orbit-angle: -32deg; }
+.ring-two { --orbit-angle: 30deg; animation-duration: 49s; animation-direction: reverse; }
+.float-tag { animation: companion-label 6s ease-in-out infinite; }
+.tag2 { animation-delay: -2s; }
+.tag3 { animation-delay: -4s; }
+.spark { animation: companion-twinkle 5s ease-in-out infinite; }
+.spark-two { animation-delay: -2.5s; }
+.login-shell { animation: welcome-enter 700ms cubic-bezier(.2,.7,.2,1) both; }
+.welcome-copy { animation: welcome-enter 800ms 100ms cubic-bezier(.2,.7,.2,1) both; }
+.login-content > .login-kicker, .login-content > h2, .login-description,
+.login-content > form, .login-help {
+  animation: welcome-enter 650ms cubic-bezier(.2,.7,.2,1) both;
+}
+.login-content > .login-kicker { display: inline-block; animation-delay: 120ms; }
+.login-content > h2 { animation-delay: 180ms; }
+.login-description { animation-delay: 230ms; }
+.login-content > form { animation-delay: 280ms; }
+.login-help { animation-delay: 330ms; }
+.login-content input {
+  transition: border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+}
+.login-content input:focus {
+  background-color: #fff;
+  border-color: #95b18a;
+  box-shadow: 0 0 0 4px #9cb68a1c;
+}
+.login-submit[aria-busy="true"]::after {
+  content: '';
+  width: 15px;
+  height: 15px;
+  border: 2px solid #ffffff55;
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: companion-star 850ms linear infinite;
+}
+.login-content #login-error:not(:empty) { animation: message-enter 240ms ease-out; }
+.motion-paused *, .motion-paused *::after { animation-play-state: paused !important; }
+@keyframes companion-float {
+  0%, 100% { transform: translateY(0) rotate(-13deg); }
+  50% { transform: translateY(var(--float-distance)) rotate(-7deg); }
+}
+@keyframes companion-star { to { transform: rotate(360deg); } }
+@keyframes companion-orbit {
+  from { transform: rotate(var(--orbit-angle)); }
+  to { transform: rotate(calc(var(--orbit-angle) + 360deg)); }
+}
+@keyframes companion-label {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes companion-twinkle {
+  0%, 100% { opacity: .45; transform: scale(.9); }
+  50% { opacity: .9; transform: scale(1.08); }
+}
+@keyframes welcome-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes message-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 760px) {
+  .orbit-art, .welcome-art { --float-distance: -5px; }
+  .orb, .welcome-orb { animation-duration: 8s; }
+  .login-shell { animation-duration: 450ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb, .orb span, .welcome-orb, .orbit, .welcome-ring, .float-tag, .spark,
+  .login-shell, .welcome-copy, .login-content > .login-kicker,
+  .login-content > h2, .login-description, .login-content > form, .login-help,
+  .login-content #login-error:not(:empty), .login-submit[aria-busy="true"]::after {
+    animation: none !important;
+  }
+  .login-content input { transition: none; }
+}
