@@ -134,10 +134,17 @@ class Decision(BaseModel):
     decision:str
     comment:str=Field(default='',max_length=500)
 
+def _is_hidden_branch(sub):
+    """旧版 OpenClaw 执行分支已停用且不再展示，不阻止删除主智能体；其目录保留在磁盘上。"""
+    try:
+        return (rt.AGENTS/sub.phc_id.replace(':','_')/'openclaw_package').is_dir()
+    except (OSError, ValueError):
+        return False
+
 def assert_no_children(agent_id):
     from app import user_app as legacy
     for group in legacy.list_agent_groups():
-        if group.parent_agent_id.replace(':','_')==agent_id and group.sub_agents:
+        if group.parent_agent_id.replace(':','_')==agent_id and any(not _is_hidden_branch(sub) for sub in group.sub_agents):
             raise HTTPException(409,'主智能体仍有关联子智能体，请先申请删除所有子智能体')
 
 @user_router.get('')
@@ -242,13 +249,17 @@ def execute_approved(rid: str, owner: str):
             for group in legacy.list_agent_groups():
                 group.sub_agents=[s for s in group.sub_agents if s.phc_id.replace(':','_')!=agent_id]
                 legacy.save_agent_group(group)
-            snapshot=Path(legacy._last_agent_path())
+            state_dir=Path(legacy._last_agent_path()).parent
             if owner != 'user':
                 account = hashlib.sha256(owner.encode('utf-8')).hexdigest()
-                snapshot = rt.ROOT/'local_store/user_state'/account/'last_agent.json'
-            if snapshot.exists():
+                state_dir = rt.ROOT/'local_store/user_state'/account
+            # Octopus 与 OpenClaw 分身各有一份快照；OpenClaw 快照记录了自己的实例编号。
+            for snapshot in (state_dir/'last_agent.json', state_dir/'last_agent_openclaw.json'):
+                if not snapshot.exists():
+                    continue
                 data=json.loads(snapshot.read_text(encoding='utf-8'))
-                if str((data.get('phc') or {}).get('id','')).replace(':','_')==agent_id:
+                instance=str(data.get('instance_id') or (data.get('phc') or {}).get('id','')).replace(':','_')
+                if instance==agent_id:
                     snapshot.unlink()
             rt.JOBS.pop(agent_id,None)
             with db() as c: c.execute("UPDATE requests SET status='deleted',last_error='' WHERE id=?",(rid,))

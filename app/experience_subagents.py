@@ -19,11 +19,10 @@ OCTOPUS_CHILD_CAPABILITIES = {
     'text-processing': '文本处理', 'news-search': '新闻搜索',
     'web-browsing': '网页浏览', 'webchat': '网页对话',
 }
-OPENCLAW_BRANCH_CAPABILITIES = {
-    'browser': '浏览器工具', 'file_access': '文件访问',
-    'memory': '本地记忆', 'shell': '命令执行',
-    'canvas': '画布', 'camera': '摄像头', 'webchat': '网页对话',
-}
+
+
+def _is_openclaw(path: Path) -> bool:
+    return (path / 'openclaw_package').is_dir()
 
 
 def _owned_child(child_id: str, request):
@@ -33,6 +32,9 @@ def _owned_child(child_id: str, request):
     parent_id = str(manifest.get('parent_phc_id') or '')
     if not parent_id or manifest.get('credential_mode') != 'inherited_from_parent':
         raise HTTPException(400, '所选实例不是继承身份的子智能体')
+    # 旧版 OpenClaw 执行分支已停用，Octopus 子智能体只能是 Octopus。
+    if _is_openclaw(child):
+        raise HTTPException(400, 'OpenClaw 执行分支已停用，Octopus 子智能体只能是 Octopus')
     snapshot_path = Path(legacy._last_agent_path(request))
     try:
         account = json.loads(snapshot_path.read_text(encoding='utf-8'))
@@ -42,17 +44,15 @@ def _owned_child(child_id: str, request):
         raise HTTPException(403, '该子智能体不属于当前账号')
     if child.name == parent_id.replace(':', '_'):
         raise HTTPException(400, '请选择子智能体')
-    kind = 'openclaw' if (child / 'openclaw_package').is_dir() else 'octopus'
-    return child, manifest, kind
+    return child, manifest, 'octopus'
 
 
 @router.get('/instance/{child_id}/update-options')
 def child_update_options(child_id: str, request: Request):
     child, manifest, kind = _owned_child(child_id, request)
-    options = OPENCLAW_BRANCH_CAPABILITIES if kind == 'openclaw' else OCTOPUS_CHILD_CAPABILITIES
     return {'success': True, 'id': child.name, 'name': manifest.get('name') or child.name,
             'agent_type': kind, 'capabilities': manifest.get('capabilities') or [],
-            'options': [{'id': key, 'label': value} for key, value in options.items()]}
+            'options': [{'id': key, 'label': value} for key, value in OCTOPUS_CHILD_CAPABILITIES.items()]}
 
 
 class ChildUpdate(BaseModel):
@@ -62,8 +62,6 @@ class ChildUpdate(BaseModel):
 @router.post('/instance/{child_id}/update')
 def update_child(child_id: str, payload: ChildUpdate, request: Request):
     child, manifest, kind = _owned_child(child_id, request)
-    if kind != 'octopus':
-        raise HTTPException(400, 'OpenClaw 执行分支请使用技能更新页面')
     selected = list(dict.fromkeys(payload.capabilities))
     if not selected or not set(selected) <= set(OCTOPUS_CHILD_CAPABILITIES):
         raise HTTPException(400, '请选择该 Octopus 子智能体支持的能力')
@@ -120,44 +118,6 @@ def create_octopus_child(request, parent):
     group.sub_agents.append(child);legacy.save_agent_group(group)
     return {'success':True,'child':{'id':child.id,'phc_id':child.phc_id,'name':child.name}}
 
-def create_openclaw_branch(request, parent):
-    """Create a local execution branch, not a newly issued identity credential."""
-    from agent_provider.openclaw.openclaw_package import build_openclaw_agent_files
-    import hashlib
-    child_id = parent.name + '_exec_' + uuid.uuid4().hex[:12]
-    root = runtime.AGENTS / child_id
-    root.mkdir(parents=True, exist_ok=False)
-    values, _ = runtime.model_env(parent)
-    model = values.get('OPENAI_MODEL') or values.get('OPENCLAW_MODEL') or 'deepseek-v4-pro'
-    config = {'provider': values.get('LLM_PROVIDER', 'openai'), 'model': model,
-              'base_url': values.get('OPENAI_BASE_URL', '')}
-    cmc = legacy.build_sub_agent_cmc(request.capabilities, config)
-    build_openclaw_agent_files(root=str(root), phc={'id': request.parent_phc_id}, pa={},
-        cmc=cmc, hid=hashlib.sha256(child_id.encode()).hexdigest(),
-        hooks_config={}, skills_config=[], llm_config=config)
-    manifest = {'id': child_id, 'name': request.name.strip(), 'description': request.description,
-        'agent_type': 'openclaw', 'role': 'executor', 'parent_phc_id': request.parent_phc_id,
-        'binding': {'PHC_id': request.parent_phc_id}, 'credential_mode': 'inherited_from_parent',
-        'capabilities': request.capabilities}
-    (root / 'agent_manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
-    binding_path = root / 'openclaw_package/openclaw_binding.json'
-    binding = json.loads(binding_path.read_text(encoding='utf-8'))
-    binding.update(instance_id=child_id, credential_mode='inherited_from_parent',
-                   note='Local execution branch linked to parent identity; no separate PHC issued.')
-    binding_path.write_text(json.dumps(binding, ensure_ascii=False, indent=2), encoding='utf-8')
-    # Keys stay on the server. Runtime resolves the parent's model configuration.
-    (root / 'openclaw_package/.env').write_text('', encoding='utf-8')
-    child = legacy.SubAgentInfo(id=child_id, name=request.name.strip(), phc_id=child_id,
-        status='created', created_at=datetime.now(timezone.utc).isoformat(), deploy_path=str(root))
-    groups = legacy.list_agent_groups(request.parent_phc_id)
-    group = groups[0] if groups else legacy.MultiAgentGroup(group_id='group_'+request.parent_phc_id,
-        group_name='Octopus companions', parent_agent_id=request.parent_phc_id, sub_agents=[],
-        communication_config={'protocol':'ANP','scope':'local'}, created_at=child.created_at)
-    group.sub_agents.append(child)
-    legacy.save_agent_group(group)
-    return {'success': True, 'child': {'id':child_id, 'phc_id':child_id, 'name':child.name,
-                                     'agent_type':'openclaw', 'role':'executor'}}
-
 class ChildRequest(BaseModel):
     agent_type: str | None = Field(default=None,pattern='^(octopus|openclaw)$')
     parent_phc_id: str = Field(max_length=120)
@@ -175,8 +135,10 @@ def children(parent_id: str):
                     'created_at':child.created_at, 'group_id':group.group_id}
             try:
                 path = runtime.agent_dir(child.phc_id)
-                kind = 'openclaw' if (path / 'openclaw_package').is_dir() else 'octopus'
-                item.update(agent_type=kind, role='executor' if kind=='openclaw' else 'assistant')
+                if _is_openclaw(path):
+                    # 旧版 OpenClaw 执行分支已停用，不再在列表中展示。
+                    continue
+                item.update(agent_type='octopus', role='assistant')
                 live = runtime.snapshot(child.phc_id)
                 item.update(stage=live['stage'], message=live['message'])
             except HTTPException:
@@ -192,22 +154,16 @@ async def create_child(request: ChildRequest):
     from app.deletion_review import frozen
     if frozen(parent.name):
         raise HTTPException(409, '主智能体已申请删除，暂不能创建子智能体')
-    available=[kind for kind,folder in [('octopus','octopus_build'),('openclaw','openclaw_package')] if (parent/folder).is_dir()]
-    if len(available)!=1:
-        raise HTTPException(409,'主智能体运行包缺失或类型不明确，请检查主实例配置')
-    kind=available[0]
-    if kind == 'openclaw':
-        raise HTTPException(400, 'OpenClaw 仅作为独立身份认证实例，不支持创建子智能体')
-    octopus = (request.agent_type or 'octopus') == 'octopus'
-    supported=set(OCTOPUS_CHILD_CAPABILITIES if octopus else OPENCLAW_BRANCH_CAPABILITIES)
-    if not set(request.capabilities) <= supported:
+    if (request.agent_type or 'octopus') != 'octopus':
+        raise HTTPException(400, 'Octopus 子智能体只能是 Octopus，OpenClaw 请在「我的分身」中单独申领')
+    if runtime.package(parent).name != 'octopus_build' or not (parent / 'octopus_build').is_dir():
+        raise HTTPException(400, 'OpenClaw 分身不支持创建子智能体')
+    if not set(request.capabilities) <= set(OCTOPUS_CHILD_CAPABILITIES):
         raise HTTPException(400, '存在不支持的能力')
     if not CREATE_LOCK.acquire(blocking=False):
         raise HTTPException(409, '另一个子智能体正在创建，请稍后重试')
     try:
-        if octopus:
-            return create_octopus_child(request,parent)
-        return create_openclaw_branch(request, parent)
+        return create_octopus_child(request,parent)
     except HTTPException:
         raise
     except Exception:

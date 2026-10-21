@@ -188,7 +188,7 @@ class UpdateTests(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
 
-    def test_openclaw_branch_has_its_own_tools_and_rejects_octopus_update(self):
+    def test_legacy_openclaw_branch_is_no_longer_updatable(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             agents = root / 'agents'
@@ -205,12 +205,9 @@ class UpdateTests(unittest.TestCase):
             with patch.object(runtime, 'AGENTS', agents), \
                  patch.object(runtime.auth, 'current_session', return_value={'username': 'user'}), \
                  patch.object(sub.legacy, '_last_agent_path', return_value=str(account)):
-                options = client.get(f'/user/children/instance/{child.name}/update-options')
-                self.assertEqual(options.status_code, 200, options.text)
-                self.assertEqual(options.json()['agent_type'], 'openclaw')
-                self.assertEqual({item['id'] for item in options.json()['options']}, set(sub.OPENCLAW_BRANCH_CAPABILITIES))
+                self.assertEqual(client.get(f'/user/children/instance/{child.name}/update-options').status_code, 400)
                 self.assertEqual(client.post(f'/user/children/instance/{child.name}/update',
-                                             json={'capabilities': ['browser']}).status_code, 400)
+                                             json={'capabilities': ['webchat']}).status_code, 400)
 
     def test_child_update_uses_only_its_supported_capabilities(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -1,15 +1,16 @@
 'use strict';
 const $ = s => document.querySelector(s);
 const escapeHTML = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state = { phc:null, pa:null, cmc:null, matrix:null, user:null, requestId:'', type:'octopus', created:null, loggedIn:false };
+const state = { phc:null, pa:null, cmc:null, matrix:null, user:null, requestId:'', type:'octopus', created:null, loggedIn:false, claw:null };
 const names = {home:'工作台',create:'创建智能体',identity:'我的可信身份',settings:'连接与设置'};
 $('#agent-type option[value="openclaw"]').remove();
 $('#agent-type').closest('label').hidden=true;
 const openclawInfo=document.createElement('aside');openclawInfo.className='panel';
-openclawInfo.innerHTML='<h2>执行分支 · OpenClaw</h2><p class="muted">Octopus 负责问答与分析。在「我的智能体」中添加 OpenClaw 执行分支，关联主身份并独立运行。部署后打开执行控制台，在配置工具并授权后完成电脑操作。执行分支不能创建子智能体。</p><button type="button" class="secondary" data-page="partners">管理我的智能体</button>';
+openclawInfo.innerHTML='<h2>OpenClaw 分身</h2><p class="muted">Octopus 负责问答与分析。OpenClaw 是在电脑本机运行的执行型分身：沿用同一可信身份单独申领，部署后在执行控制台中经你配置和授权完成电脑操作。OpenClaw 分身不能创建子智能体。</p><button type="button" class="secondary" id="settings-open-claw">前往我的 OpenClaw 分身</button>';
 $('#page-settings').append(openclawInfo);
+openclawInfo.querySelector('#settings-open-claw').onclick=()=>{if(state.avatarReady)window.dispatchEvent(new CustomEvent('open-avatar-tab',{detail:'openclaw'}));else page('claw');};
 const openclawEntry=document.createElement('p');openclawEntry.className='muted';
-openclawEntry.innerHTML='另支持 <button type="button" class="text-button" data-page="settings">了解 OpenClaw 执行分支 ↗</button>';
+openclawEntry.innerHTML='完成化身申领后，还可在「我的分身」中申领 <button type="button" class="text-button" data-page="settings">OpenClaw 分身 ↗</button>';
 $('#page-create .heading').append(openclawEntry);
 let noticeTimer;
 let dependencyCheck = null;
@@ -31,7 +32,7 @@ async function checkOpenClawEnvironment(){
  return dependencyCheck;
 }
 function notice(message, error=false) { const el=$('#notice'); el.textContent=message; el.classList.toggle('error',error); el.hidden=false; clearTimeout(noticeTimer); noticeTimer=setTimeout(()=>el.hidden=true,12000); }
-function page(name) { if(!names[name]) name='home'; if(!state.avatarReady && !state.created && !['settings','identity'].includes(name)) name='create'; document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==`page-${name}`); document.querySelectorAll('nav button').forEach(el=>el.classList.toggle('active',el.dataset.page===name)); $('#page-name').textContent=names[name]; location.hash=name; }
+function page(name) { if(!names[name]) name='home'; if(!state.avatarReady && !state.created && !['settings','identity','claw'].includes(name)) name='create'; document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==`page-${name}`); document.querySelectorAll('nav button').forEach(el=>el.classList.toggle('active',el.dataset.page===name)); $('#page-name').textContent=names[name]; location.hash=name; }
 function loginRequired(){state.loggedIn=false;document.body.classList.add('session-checking');location.replace('./login.html?page='+encodeURIComponent(location.hash.slice(1)||'home'));}
 async function api(path, payload, allowFalse=false) {
  const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),120000);
@@ -63,7 +64,7 @@ function sync(){
  for(let i=1;i<=3;i++) $(`#step${i}`).classList.toggle('done',!![state.phc,state.pa,state.created][i-1]);
  $('#credential-state').textContent=state.phc?'已持有可信身份凭证':'尚未完成身份确认';
  const did=state.phc?.DID || state.phc?.ASO?.TPM?.CDID || '尚未生成';
- $('#credential-details').innerHTML=[['身份凭证编号',state.phc?.id||'尚未签发'],['去中心化身份',did],['智能体类型',state.pa?state.type:'尚未绑定'],['智能体凭证',state.pa?'已持有':'尚未签发']].map(([k,v])=>`<dt>${k}</dt><dd>${escapeHTML(v)}</dd>`).join('');
+ $('#credential-details').innerHTML=[['身份凭证编号',state.phc?.id||'尚未签发'],['去中心化身份',did],['智能体类型',state.pa?state.type:'尚未绑定'],['智能体凭证',state.pa?'已持有':'尚未签发'],['OpenClaw 分身',state.claw?'已申领 · 已持有凭证':'尚未申领']].map(([k,v])=>`<dt>${k}</dt><dd>${escapeHTML(v)}</dd>`).join('');
  if(state.pa) $('#agent-card').innerHTML=`<div class="agent-live"><span class="empty-icon">✳</span><div><h3>我的${state.type==='openclaw'?'本地':'通用'}智能体</h3><p>${state.created?'智能体文件已生成，请完成启动后使用。':'已读取最近的绑定记录，运行状态尚未确认。'}</p><small>身份已绑定 · ${escapeHTML(state.type)}</small></div><button class="primary" data-page="create">${state.created?'查看启动指引':'继续创建'}</button></div>`;
 }
 const normalizeServiceUrl=value=>{
@@ -73,19 +74,30 @@ const normalizeServiceUrl=value=>{
 };
 const connection = () => ({tp:normalizeServiceUrl($('#tp-url').value),ap:normalizeServiceUrl($('#ap-url').value)});
 function pendingKey(){return `banxing.pending.${state.account||''}`;}
+function fillIdentity(identity){
+ for(const key of ['name','id_number','id_card_number','email']) $('#identity-form').elements[key].value=identity[key]||'';
+ $('#recovery-name').value=identity.name||'';$('#recovery-id').value=identity.id_number||'';$('#recovery-id-card').value=identity.id_card_number||'';$('#recovery-email').value=identity.email||'';
+ state.user={pii:identity,bi:{last_login_ip:'127.0.0.1'},cdid:'cdid:user.placeholder',ecid:'g'};
+}
 async function restore(){
  state.avatarReady=false;
- const data=await api('/user/last_agent',undefined,true);
- if(data.success&&data.agent){const a=data.agent;state.phc=a.phc||null;state.pa=a.pa||null;state.cmc=a.cmc||null;state.type=a.agent_type||'octopus';if(state.type==='openclaw'&&!$('#agent-type option[value="openclaw"]'))$('#agent-type').add(new Option('OpenClaw','openclaw'));$('#agent-type').value=state.type;state.created=null;
-  if(a.identity){for(const key of ['name','id_number','id_card_number','email']) $('#identity-form').elements[key].value=a.identity[key]||'';$('#recovery-name').value=a.identity.name||'';$('#recovery-id').value=a.identity.id_number||'';$('#recovery-id-card').value=a.identity.id_card_number||'';$('#recovery-email').value=a.identity.email||'';state.user={pii:a.identity,bi:{last_login_ip:'127.0.0.1'},cdid:'cdid:user.placeholder',ecid:'g'};}
+ const [data,claw]=await Promise.all([api('/user/last_agent',undefined,true),api('/user/last_agent?agent_type=openclaw',undefined,true)]);
+ if(data.success&&data.agent){const a=data.agent;state.phc=a.phc||null;state.pa=a.pa||null;state.cmc=a.cmc||null;state.type='octopus';$('#agent-type').value=state.type;state.created=null;
+  if(a.identity)fillIdentity(a.identity);
  }
+ // Octopus 与 OpenClaw 分身沿用同一可信身份，各自持有能力凭证（PA）。
+ const c=claw.success&&claw.agent;
+ state.claw=c&&c.phc?.id&&c.pa?{phc:c.phc,pa:c.pa,cmc:c.cmc||[],instanceId:String(c.instance_id||c.phc.id).replaceAll(':','_')}:null;
+ if(c&&!state.phc&&c.phc){state.phc=c.phc;if(c.identity)fillIdentity(c.identity);}
  try{const pending=JSON.parse(sessionStorage.getItem(pendingKey())||'null');if(pending&&!state.phc){state.requestId=pending.id;$('#tp-url').value=pending.tp;}}catch{}
  if(state.pa&&state.phc){try{await api('/user/runtime/'+encodeURIComponent(state.phc.id.replaceAll(':','_'))+'/status');state.avatarReady=true;}catch{}}
+ // 旧版本只申领了 OpenClaw 主实例的用户，同样可以进入工作台管理该分身。
+ if(!state.avatarReady&&state.claw){try{await api('/user/runtime/'+encodeURIComponent(state.claw.instanceId)+'/status');state.avatarReady=true;}catch{}}
  $('#use-saved-phc').hidden=!state.phc;
  sync();
  window.dispatchEvent(new Event('agent-record-ready'));
 }
-document.addEventListener('click',e=>{const nav=e.target.closest('[data-page]');if(nav)page(nav.dataset.page);const scene=e.target.closest('[data-scenario]');if(scene){$('#scenario-note').textContent=`为「${scene.dataset.scenario}」创建伙伴。审核通过后可按需选择服务提供的能力。`;if(!state.pa){state.type='octopus';$('#agent-type').value=state.type;state.matrix=null;$('#capabilities').replaceChildren();sync();}page('create');}});
+document.addEventListener('click',e=>{const nav=e.target.closest('[data-page]');if(nav)page(nav.dataset.page);const scene=e.target.closest('[data-scenario]');if(scene&&scene.dataset.scenario==='本地助手'&&state.avatarReady){window.dispatchEvent(new CustomEvent('open-avatar-tab',{detail:'openclaw'}));return;}if(scene){$('#scenario-note').textContent=`为「${scene.dataset.scenario}」创建伙伴。审核通过后可按需选择服务提供的能力。`;if(!state.pa){state.type='octopus';$('#agent-type').value=state.type;state.matrix=null;$('#capabilities').replaceChildren();sync();}page('create');}});
 window.addEventListener('hashchange',()=>page(location.hash.slice(1)));
 action('#logout',async()=>{await api('/user/api/logout',{});loginRequired();});
 action('#refresh',async()=>{await restore();notice('已刷新本地绑定记录。');});
@@ -156,8 +168,8 @@ function requireVerifiedPA(pa){
   throw new Error(`恢复凭证校验未通过（${failedChecks.join('、')}），未保存或生成智能体。请确认 PHC 和服务端历史记录后重试。`);
  }
 }
-async function saveRecoveredSnapshot(phc,pa,cmc,type,user){
- const saved=await api('/user/last_agent',{phc,pa,cmc,agent_type:type,identity:user.pii});
+async function saveRecoveredSnapshot(phc,pa,cmc,type,user,extra={}){
+ const saved=await api('/user/last_agent',{phc,pa,cmc,agent_type:type,identity:user.pii,...extra});
  if(!saved.success)throw new Error('凭证已核验，但本地快照保存失败；请查看服务状态后重试。');
 }
 $('#recovery-form').addEventListener('submit',event=>{
@@ -195,12 +207,33 @@ $('#recovery-form').addEventListener('submit',event=>{
    requireVerifiedPA(pa);
    const restoredPHC=pa.PHC||recoveredPA.phc||phc;
    const restoredType=pa.agent_type||selectedType;
+   if(restoredType==='openclaw'){
+    // OpenClaw 分身单独保存，不覆盖 Octopus 化身的记录。
+    recoveryProgress('凭证已核验，正在重建本地 OpenClaw 分身文件…');
+    try{
+     const created=await api('/user/create_agent',{phc:restoredPHC,pa:pa.PA,cmc:pa.CMC,agent_type:'openclaw',hid:user.pii.id_number,...window.clawKit.extras(pa.CMC),skills_config:[]});
+     if(!created.instance_id)throw new Error(created.message||'生成未完成。');
+     await saveRecoveredSnapshot(restoredPHC,pa.PA,pa.CMC,'openclaw',user,{instance_id:created.instance_id});
+     recoveryProgress('恢复完成。OpenClaw 分身的凭证与能力配置已找回，本地文件已重新生成；Skill 需在「系统更新」中重新安装。','success');
+     $('#recovery-phc').value='';
+     $('#recovery-photo').value='';
+    }catch(error){
+     recoveryProgress('凭证已恢复并保存，但 OpenClaw 分身文件生成未完成，请检查运行环境后重试恢复。','error');
+     throw new Error(`凭证已恢复并保存，但 OpenClaw 分身文件生成失败：${error.message}`);
+    }finally{
+     try{
+      await restore();
+      window.dispatchEvent(new Event('claw-record-ready'));
+     }catch(e){notice('恢复完成，但重新读取分身记录失败：'+e.message,true);}
+    }
+    return;
+   }
    await saveRecoveredSnapshot(restoredPHC,pa.PA,pa.CMC,restoredType,user);
    state.phc=restoredPHC;state.pa=pa.PA;state.cmc=pa.CMC;state.type=restoredType;state.user={pii:user.pii,bi:{last_login_ip:'127.0.0.1'},cdid:user.cdid,ecid:user.ecid};state.created=null;
    $('#use-saved-phc').hidden=false;
-   if(restoredType==='openclaw'&&!$('#agent-type option[value="openclaw"]'))$('#agent-type').add(new Option('OpenClaw','openclaw'));
    $('#agent-type').value=restoredType;
    for(const key of ['name','id_number','id_card_number','email'])$('#identity-form').elements[key].value=user.pii[key]||'';
+   $('#recovery-name').value=user.pii.name||'';$('#recovery-id').value=user.pii.id_number||'';
    sync();
    recoveryProgress('凭证已核验并保存，正在重建本地智能体文件…');
    try{

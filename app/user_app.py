@@ -209,7 +209,8 @@ def _build_openclaw_snapshot(
         pa=None,
         package_cmi=None,
         hooks_config=hooks_config,
-        skills_config=skills_config,
+        # Skills 在生成分身后通过 /skills/install 安装并记入授权链，快照阶段不联网安装。
+        skills_config=None,
         llm_config=merged_llm_config,
     )
 
@@ -224,15 +225,59 @@ def _build_openclaw_snapshot(
         llm_public_config=llm_public_config,
     )
 
-    return package_dir, final_cmi_int
+    return package_dir, _attach_skill_chain(package_dir, final_cmi_int, hid_use)
+def _is_legacy_openclaw_root(path: str) -> bool:
+    """旧版 OpenClaw 主实例：目录下只有 openclaw_package，没有 octopus_build。"""
+    return os.path.isdir(os.path.join(path, "openclaw_package")) and not os.path.isdir(os.path.join(path, "octopus_build"))
+
+
+def _instance_root(phc: Dict[str, Any], agent_type: str) -> tuple[str, str]:
+    """返回 (实例编号, 实例目录)。
+
+    Octopus 沿用 <phc_id>；OpenClaw 使用 <phc_id>_openclaw，两类分身互不覆盖。
+    旧版本把 OpenClaw 主实例放在 <phc_id> 下，存在时继续沿用。
+    """
+    base_id = str((phc or {}).get("id") or "phc").replace(":", "_")
+    agents = os.path.join(os.getcwd(), "local_store", "agents")
+    if str(agent_type or "").strip().lower() != "openclaw":
+        return base_id, os.path.join(agents, base_id)
+    instance_id = base_id + "_openclaw"
+    legacy = os.path.join(agents, base_id)
+    if not os.path.isdir(os.path.join(agents, instance_id)) and _is_legacy_openclaw_root(legacy):
+        return base_id, legacy
+    return instance_id, os.path.join(agents, instance_id)
+
+
+def _openclaw_skill_chain_head(package_dir: str) -> str:
+    """已安装 Skill 授权哈希链的链头；更新时用它把实际安装的技能绑定进 CMI。"""
+    try:
+        with open(os.path.join(package_dir, "state", "skill_auth_chain.json"), "r", encoding="utf-8") as f:
+            return str(json.load(f).get("head") or "")
+    except (OSError, ValueError):
+        return ""
+
+
+def _attach_skill_chain(package_dir: str, cmc_cmi: Any, hid: str) -> Any:
+    """把 Skill 授权链链头并入 CMI，使凭证覆盖分身实际安装过的技能。
+
+    ClawHub 均未安装时链头为空，CMI 与 not-skill 时完全一致，保持原有口径。
+    """
+    try:
+        chain_head = _openclaw_skill_chain_head(package_dir)
+        if not chain_head:
+            return cmc_cmi
+        from agent_provider.openclaw.openclaw_package import compute_openclaw_bound_cmi
+        return compute_openclaw_bound_cmi(hid=hid, code_cmi=chain_head, cmc=[], llm_public_config={})
+    except Exception:
+        return cmc_cmi
+
+
 def _agent_package_dir(phc: Dict[str, Any], cmc: list) -> str:
     """
-    根据 agent_type 返回需要计�?CMI 的目录�?
+    根据 agent_type 返回需要计算 CMI 的目录。
     """
-    phc_id = (phc.get("id") or "phc").replace(":", "_")
-    root = os.path.join(os.getcwd(), "local_store", "agents", phc_id)
-
     agent_type = detect_agent_type(cmc)
+    _, root = _instance_root(phc, agent_type)
 
     if agent_type == "openclaw":
         return os.path.join(root, "openclaw_package")
@@ -271,6 +316,7 @@ class RequestCreateAgent(BaseModel):
     pa: Dict[str, Any]
     cmc: list
     agent_type: str | None = None
+    hid: str | None = None
     hooks_config: dict | None = None
     skills_config: list | None = None
     llm_config: dict | None = None
@@ -501,7 +547,7 @@ def user_recover_both(req: RecoverBothRequest) -> Dict[str, Any]:
         phc = phc_obj.get('PHC') or phc_obj.get('phc') or {}
         if not phc:
             return {"success": False, "error": "phc_recover_failed", "detail": phc_obj, "identity": {"hid": hid, "pii": req.user.pii.model_dump(exclude_none=True), "bi": req.user.bi.model_dump(exclude_none=True)}}
-        pa_obj = request_pa_recover(req.ap_base, phc, req.user)
+        pa_obj = request_pa_recover(req.ap_base, phc, req.user, req.agent_type)
         pa_obj = _verify_and_restore_pa(pa_obj, req.user, req.agent_type, req.tp_base)
         did = phc.get("DID") or ((phc.get("ASO") or {}).get("TPM") or {}).get("CDID")
         try:
@@ -556,6 +602,8 @@ def user_cmm_submit(req: RequestCMMSubmit) -> Dict[str, Any]:
     if agent_type not in {"octopus", "openclaw"}:
         agent_type = detect_agent_type(req.cmc or [])
 
+    if agent_type == "octopus" and _is_legacy_openclaw_root(_instance_root(req.phc or {}, "octopus")[1]):
+        return {"success": False, "error": "本机该身份目录仍被旧版 OpenClaw 主实例占用，请先在「我的分身 · OpenClaw」申请删除旧实例，再生成 Octopus 化身。"}
     # Use provided user pk/sk; if missing, fall back to a fresh ephemeral pair
     try:
         user_pk_int = int(str(req.user_pk or ""))
@@ -568,8 +616,7 @@ def user_cmm_submit(req: RequestCMMSubmit) -> Dict[str, Any]:
     # Build personalized package snapshot to compute CMI.
     try:
         phc = req.phc or {}
-        phc_id = (phc.get("id") or "phc").replace(":", "_")
-        root = os.path.join(os.getcwd(), "local_store", "agents", phc_id)
+        _, root = _instance_root(phc, agent_type)
         os.makedirs(root, exist_ok=True)
 
         hid_use0 = _normalize_hid(req.hid)
@@ -648,6 +695,7 @@ def user_cmm_submit(req: RequestCMMSubmit) -> Dict[str, Any]:
                 cmc=req.cmc or [],
                 llm_public_config=llm_public_config,
             )
+            calc_cmi_int = _attach_skill_chain(calc_dir, calc_cmi_int, hid_use)
         else:
             calc_dir = _agent_package_dir(req.phc or {}, req.cmc or [])
             calc_cmi_int = dir_code_cmi_hid(calc_dir, hid_use)
@@ -832,7 +880,9 @@ def user_create_agent(req: RequestCreateAgent) -> Dict[str, Any]:
             or ((phc.get("ASO") or {}).get("TPM") or {}).get("CDID")
         )
 
-        root = os.path.join(os.getcwd(), "local_store", "agents", phc_id)
+        instance_id, root = _instance_root(phc, agent_type)
+        if agent_type == "octopus" and _is_legacy_openclaw_root(root):
+            return {"success": False, "error": "本机该身份目录仍被旧版 OpenClaw 主实例占用，请先申请删除旧实例，再生成 Octopus 化身。"}
         os.makedirs(root, exist_ok=True)
 
         # ==========================
@@ -852,9 +902,8 @@ def user_create_agent(req: RequestCreateAgent) -> Dict[str, Any]:
 
                 cmi_val = ((pa.get("APM") or {}).get("CMI"))
 
-                # RequestCreateAgent 当前没有 HID 字段�?
-                # 这里不写 PII/BI，只�?DID/PHC ID 做本地非敏感索引�?
-                hid_val = did or phc.get("DID") or phc_id
+                # 绑定文件只记录 HID（身份标识的哈希），不写 PII/BI；旧前端未传 HID 时退回 DID/PHC ID。
+                hid_val = _normalize_hid(req.hid) if req.hid else (did or phc.get("DID") or phc_id)
 
                 openclaw_info = build_openclaw_agent_files(
                     root=root,
@@ -869,19 +918,13 @@ def user_create_agent(req: RequestCreateAgent) -> Dict[str, Any]:
                 )
 
                 manifest = {
-                    "id": phc_id,
+                    "id": instance_id,
+                    "name": "我的 OpenClaw 分身",
+                    # 不用 phc_id 键名：skills 路由按清单中的 phc_id 匹配实例，会与 Octopus 实例编号冲突。
+                    "identity_phc_id": phc.get("id"),
                     "agent_type": "openclaw",
                     "did": did,
-                    "modules": {
-                        "features": [m.get("label") for m in (cmc[0] if len(cmc) > 0 else []) if isinstance(m, dict)],
-                        "gateway": [m.get("label") for m in (cmc[1] if len(cmc) > 1 else []) if isinstance(m, dict)],
-                        "personality": [m.get("label") for m in (cmc[2] if len(cmc) > 2 else []) if isinstance(m, dict)],
-                        "hooks": [m.get("label") for m in (cmc[3] if len(cmc) > 3 else []) if isinstance(m, dict)],
-                        "skills": [m.get("label") for m in (cmc[4] if len(cmc) > 4 else []) if isinstance(m, dict)],
-                        "knowledge": [m.get("label") for m in (cmc[5] if len(cmc) > 5 else []) if isinstance(m, dict)],
-                        "channels": [m.get("label") for m in (cmc[6] if len(cmc) > 6 else []) if isinstance(m, dict)],
-                        "appearance": [m.get("label") for m in (cmc[7] if len(cmc) > 7 else []) if isinstance(m, dict)],
-                    },
+                    "modules": _openclaw_manifest_modules(cmc),
                     "binding": {
                         "PHC_id": phc.get("id"),
                         "SCID": phc.get("SCID"),
@@ -913,6 +956,7 @@ def user_create_agent(req: RequestCreateAgent) -> Dict[str, Any]:
                 return {
                     "success": True,
                     "agent_type": "openclaw",
+                    "instance_id": instance_id,
                     "agent_path": manifest_path,
                     "manifest": manifest,
                     "openclaw_package": openclaw_info.get("package_dir"),
@@ -1067,7 +1111,7 @@ def user_create_agent(req: RequestCreateAgent) -> Dict[str, Any]:
                 pbf.write("popd\n")
         except Exception:
             personal_bat = None
-        return {"success": True, "agent_path": path, "manifest": manifest, "launcher": None, "personal_launcher": personal_bat, "allowed": allowed_agents}
+        return {"success": True, "instance_id": instance_id, "agent_path": path, "manifest": manifest, "launcher": None, "personal_launcher": personal_bat, "allowed": allowed_agents}
     except Exception:
         return {"success": False}
 
@@ -1168,13 +1212,14 @@ def _verify_and_restore_pa(
         verified_cch = False
 
     # CMI 校验：本地代码快照存在时比对，否则跳过（保持 AP 侧返回的 verified_cmi）
+    # OpenClaw 的 CMI 绑定的是生成时的包快照与 Skill 授权链，运行后目录会变化，不能用目录哈希复算。
     verified_cmi = None
+    is_openclaw = str(agent_type or "").strip().lower() == "openclaw"
     try:
         from crypto_lib import dir_code_cmi_hid
-        phc_id = (phc.get("id") or "phc").replace(":", "_")
-        base_dir = os.path.join(os.getcwd(), "local_store", "agents", phc_id)
-        calc_dir = os.path.join(base_dir, "openclaw_package") if str(agent_type or "").strip().lower() == "openclaw" else os.path.join(base_dir, "octopus_build")
-        if os.path.isdir(calc_dir):
+        _, base_dir = _instance_root(phc, "openclaw" if is_openclaw else "octopus")
+        calc_dir = os.path.join(base_dir, "octopus_build")
+        if not is_openclaw and os.path.isdir(calc_dir):
             calc_cmi = dir_code_cmi_hid(calc_dir, hid)
             verified_cmi = (str(calc_cmi) == pa_cmi)
     except Exception:
@@ -1282,14 +1327,15 @@ def _verify_and_restore_pa(
 def user_recover_pa(req: RequestPARecover) -> Dict[str, Any]:
     # 场景 2「仅恢复 PA」：已持有 PHC，直接提交 PHC + HID 恢复，不做 PII/BI 身份校验
     try:
-        pa_obj = request_pa_recover(req.base_url, req.phc, req.user)
+        pa_obj = request_pa_recover(req.base_url, req.phc, req.user, req.agent_type)
         pa_obj = _verify_and_restore_pa(pa_obj, req.user, req.agent_type, req.tp_base_url)
         return {"success": True, "phc": pa_obj.get("PHC") or req.phc, "pa": pa_obj}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
-def _last_agent_path(request: Request = None) -> str:
+def _last_agent_path(request: Request = None, agent_type: str = "octopus") -> str:
+    filename = "last_agent_openclaw.json" if agent_type == "openclaw" else "last_agent.json"
     if request is not None:
         session = auth.current_session(request, auth.COOKIE_USER, 'user')
         if session:
@@ -1297,29 +1343,56 @@ def _last_agent_path(request: Request = None) -> str:
         if session and session['username'] != 'user':
             import hashlib
             account = hashlib.sha256(session['username'].encode('utf-8')).hexdigest()
-            return os.path.join(os.getcwd(), 'local_store', 'user_state', account, 'last_agent.json')
-    return os.path.join(os.getcwd(), "local_store", "user_state", "last_agent.json")
+            return os.path.join(os.getcwd(), 'local_store', 'user_state', account, filename)
+    return os.path.join(os.getcwd(), "local_store", "user_state", filename)
+
+
+def _read_json_file(path: str) -> Dict[str, Any] | None:
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 @app.get('/user/last_agent')
-def user_get_last_agent(request: Request) -> Dict[str, Any]:
-    """读取最近一次创建的智能体快照，供更新/故障恢复在重启后直接复用。"""
+def user_get_last_agent(request: Request, agent_type: str = "octopus") -> Dict[str, Any]:
+    """读取最近一次创建的智能体快照，供更新/故障恢复在重启后直接复用。
+
+    Octopus 与 OpenClaw 各存一份；旧版本只有一份快照，其中的 OpenClaw 记录按 OpenClaw 返回。
+    """
     try:
-        path = _last_agent_path(request)
-        if not os.path.exists(path):
+        agent_type = "openclaw" if agent_type == "openclaw" else "octopus"
+        agent = _read_json_file(_last_agent_path(request, agent_type))
+        if agent is None and agent_type == "openclaw":
+            legacy = _read_json_file(_last_agent_path(request))
+            if legacy and legacy.get("agent_type") == "openclaw":
+                agent = legacy
+        elif agent is not None and agent_type == "octopus" and agent.get("agent_type") == "openclaw":
+            agent = None
+        if agent is None:
             return {"success": False, "error": "no_last_agent"}
-        with open(path, "r", encoding="utf-8") as f:
-            return {"success": True, "agent": json.load(f)}
+        if agent_type == "openclaw" and not agent.get("instance_id"):
+            agent["instance_id"] = _instance_root(agent.get("phc") or {}, "openclaw")[0]
+        return {"success": True, "agent": agent}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
 @app.post('/user/last_agent')
 def user_save_last_agent(request: Request, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
-    """保存最近一次创建的智能体快照（含 PHC/PA/CMC/agent_type/身份/技能）。"""
+    """保存最近一次创建的智能体快照（含 PHC/PA/CMC/agent_type/身份/技能），按智能体类型分开保存。"""
     try:
-        path = _last_agent_path(request)
+        agent_type = "openclaw" if payload.get("agent_type") == "openclaw" else "octopus"
+        path = _last_agent_path(request, agent_type)
         os.makedirs(os.path.dirname(path), exist_ok=True)
+        if agent_type == "octopus":
+            # 旧版本的单份快照里可能是 OpenClaw 主实例，先迁到 OpenClaw 快照再写 Octopus。
+            legacy = _read_json_file(path)
+            openclaw_path = _last_agent_path(request, "openclaw")
+            if legacy and legacy.get("agent_type") == "openclaw" and not os.path.exists(openclaw_path):
+                legacy.setdefault("instance_id", _instance_root(legacy.get("phc") or {}, "openclaw")[0])
+                with open(openclaw_path, "w", encoding="utf-8") as f:
+                    json.dump(legacy, f, ensure_ascii=False, indent=2)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return {"success": True}
@@ -1328,10 +1401,11 @@ def user_save_last_agent(request: Request, payload: Dict[str, Any] = Body(...)) 
 
 @app.post('/user/update_init')
 def user_update_init(req: RequestUpdateInit) -> Dict[str, Any]:
+    agent_type = "openclaw" if (req.agent_type or "").strip().lower() == "openclaw" else "octopus"
+    ap_base_url = normalize_service_base_url(req.base_url)
     try:
         import httpx
-        ap_base_url = normalize_service_base_url(req.base_url)
-        pub_resp = httpx.get(ap_base_url + '/ap/public_keys', timeout=10.0)
+        pub_resp = httpx.get(ap_base_url + '/v1/ap/public_keys', timeout=10.0)
         pub_resp.raise_for_status()
         ap_dlog_pk = int(str(pub_resp.json()["ap_dlog_pk"]))
     except Exception:
@@ -1339,7 +1413,7 @@ def user_update_init(req: RequestUpdateInit) -> Dict[str, Any]:
     sk_a, pk_a = dl_generate_user_keypair()
     hid = sha256_hex(req.user.pii.id_number)
     crf = (req.phc.get("CRF") if isinstance(req.phc, dict) else None) or ((req.phc.get("SCID") or {}).get("RF") if isinstance(req.phc, dict) else 0)
-    ar_plain = {"PHC": req.phc, "HID": hid, "CRF": crf}
+    ar_plain = {"PHC": req.phc, "HID": hid, "CRF": crf, "agent_type": agent_type}
     ar = elgamal_encrypt_bytes(ap_dlog_pk, ar_plain)
     try:
         import httpx
@@ -1348,7 +1422,7 @@ def user_update_init(req: RequestUpdateInit) -> Dict[str, Any]:
             json={
                 "ar": ar,
                 "user_pub": pk_a,
-                "agent_type": req.agent_type,
+                "agent_type": agent_type,
             },
             timeout=15.0
         )
@@ -1357,11 +1431,164 @@ def user_update_init(req: RequestUpdateInit) -> Dict[str, Any]:
         cmm_enc = data.get("cmm_enc")
         raw = elgamal_decrypt_bytes(int(sk_a), cmm_enc)
         import json
-        return {"cmm": json.loads(raw.decode()).get("CMM"), "sk": str(sk_a), "pk": str(pk_a)}
+        return {"cmm": json.loads(raw.decode()).get("CMM"), "sk": str(sk_a), "pk": str(pk_a), "agent_type": agent_type}
     except Exception:
         from agent_provider.ap import _build_cmm_matrix
-        cmm = _build_cmm_matrix(hid, req.phc, agent_type=req.agent_type)
-        return {"cmm": cmm, "sk": str(sk_a), "pk": str(pk_a), "fallback": True}
+        cmm = _build_cmm_matrix(hid, req.phc, agent_type=agent_type)
+        return {"cmm": cmm, "sk": str(sk_a), "pk": str(pk_a), "agent_type": agent_type, "fallback": True}
+
+_OPENCLAW_MODULE_ROWS = ("features", "gateway", "personality", "hooks", "skills", "llm", "knowledge", "channels", "appearance")
+_OPENCLAW_HOOK_FIELDS = {
+    "session-memory": "session_memory",
+    "command-logger": "command_logger",
+    "bootstrap-extra-files": "bootstrap_extra_files",
+    "boot-md": "boot_md",
+}
+
+
+def _openclaw_manifest_modules(cmc: list) -> Dict[str, list]:
+    """按 AP 的 OpenClaw 能力矩阵行序整理已选能力标签。"""
+    return {
+        name: [m.get("label") for m in (cmc[i] if len(cmc) > i else []) if isinstance(m, dict)]
+        for i, name in enumerate(_OPENCLAW_MODULE_ROWS)
+    }
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return int(str(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _openclaw_update_submit(req: RequestUpdateSubmit, ap_base_url: str, ap_dlog_pk: int,
+                            user_sk_int: int, user_pk_int: int, hid_use: str) -> Dict[str, Any]:
+    """OpenClaw 分身重新签发 PA：与 Octopus 相同经 AP 签发、TP 重签，但不重建运行包。
+
+    重建会删除已安装的 Skill、npm 组件和会话，因此 CMI 绑定的是能力配置、模型公开配置
+    与 Skill 授权哈希链链头（记录了实际安装/卸载过的技能）。
+    """
+    from crypto_lib import elgamal_encrypt_bytes as ap_elg_enc
+    from trust_provider.phc import verify_phc
+    from agent_provider.openclaw.openclaw_package import (
+        build_openclaw_binding,
+        compute_openclaw_bound_cmi,
+        extract_llm_public_config,
+        _configure_hooks_in_package,
+        _write_json_file,
+    )
+
+    phc = req.phc or {}
+    cmc = req.cmc or []
+    if detect_agent_type(cmc) != "openclaw":
+        return {"success": False, "error": "OpenClaw 能力配置缺少核心能力，请重新获取配置。"}
+    instance_id, root = _instance_root(phc, "openclaw")
+    package_dir = os.path.join(root, "openclaw_package")
+    if not os.path.isdir(package_dir):
+        return {"success": False, "error": "未找到本机 OpenClaw 分身运行包，请先生成分身。"}
+
+    llm_public_config = extract_llm_public_config(cmc)
+    chain_head = _openclaw_skill_chain_head(package_dir)
+    cmi_code_int = compute_openclaw_bound_cmi(
+        hid=hid_use,
+        code_cmi=chain_head,
+        cmc=cmc,
+        llm_public_config=llm_public_config,
+    )
+    obj = {
+        "CMC": cmc,
+        "HID": hid_use,
+        "PHC": phc,
+        "agent_type": "openclaw",
+        "llm_public_config": llm_public_config,
+        "CMI_code": str(cmi_code_int),
+    }
+    cmc_enc = ap_elg_enc(ap_dlog_pk, json.dumps(obj, separators=(",", ":")).encode())
+    try:
+        resp = httpx.post(ap_base_url + '/v1/ap/update_submit', json={"cmc_enc": cmc_enc, "user_pub": user_pk_int}, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
+    except httpx.HTTPError as exc:
+        return {"success": False, "error": f"智能体提供方不可用：{exc}"}
+    par = data.get("par")
+    if not par:
+        return data
+    result = json.loads(elgamal_decrypt_bytes(int(user_sk_int), par).decode())
+
+    new_phc = result.get("PHC") or {}
+    pa_cmi = str(((result.get("PA") or {}).get("APM") or {}).get("CMI") or "")
+    verified_cmi = pa_cmi == str(cmi_code_int)
+    af_calc_user = compute_af_formal(
+        str(hid_use),
+        _int_or_zero(result.get("ap_pk")),
+        _int_or_zero(result.get("tp_pk")),
+        _int_or_zero(pa_cmi),
+        _int_or_zero((new_phc.get("SCID") or {}).get("RF")),
+        _int_or_zero(result.get("r_bind2")),
+    )
+    verified_af = str(((new_phc.get("ASO") or {}).get("TPM") or {}).get("AF")) == str(af_calc_user)
+    result["verified_cmi"] = verified_cmi
+    result["verified_af_user"] = verified_af
+    if not verified_cmi or not verified_af:
+        return {"success": False, "error": "ap_update_verification_failed", "verified_cmi": verified_cmi, "verified_af_user": verified_af}
+
+    try:
+        reissue = httpx.post(
+            normalize_service_base_url(req.tp_base_url) + '/v1/tp/reissue_updated_phc',
+            json={"hid": hid_use, "candidate_phc": new_phc, "pa": result.get("PA"), "r_bind2": result.get("r_bind2")},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        return {"success": False, "error": f"TP 重签服务不可用：{exc}"}
+    if reissue.status_code == 404:
+        return {"success": False, "error": "TP 未找到已审核的身份记录或重签接口不可用，请重启 TP 服务后重试。"}
+    if reissue.status_code >= 400:
+        try:
+            detail = reissue.json().get("detail")
+        except (ValueError, AttributeError):
+            detail = None
+        return {"success": False, "error": "TP 重签失败：" + str(detail or reissue.status_code)}
+    signed_phc = reissue.json().get("phc")
+    if not signed_phc or not verify_phc(signed_phc) or signed_phc.get("PROOF", {}).get("needs_tp_resign"):
+        return {"success": False, "error": "TP 未返回可验证的重签凭证。"}
+    result["PHC"] = signed_phc
+    result["verified_phc_user"] = True
+
+    # 同步本机绑定文件、Hook 开关与实例清单；模型连接仍在运行管理中单独配置。
+    try:
+        pa_new = result.get("PA") or {}
+        binding = build_openclaw_binding(phc=signed_phc, pa=pa_new, cmc=cmc, hid=hid_use, package_cmi=pa_cmi)
+        binding["skill_chain_head"] = chain_head or None
+        _write_json_file(os.path.join(package_dir, "openclaw_binding.json"), binding)
+        selected_hooks = {
+            str((item.get("params") or {}).get("hook_type") or "")
+            for item in (cmc[3] if len(cmc) > 3 else []) if isinstance(item, dict)
+        }
+        _configure_hooks_in_package(package_dir, {
+            field: hook_type in selected_hooks for hook_type, field in _OPENCLAW_HOOK_FIELDS.items()
+        })
+        manifest_path = os.path.join(root, "agent_manifest.json")
+        manifest = _read_json_file(manifest_path) or {"id": instance_id, "agent_type": "openclaw"}
+        manifest["modules"] = _openclaw_manifest_modules(cmc)
+        manifest["binding"] = {
+            "PHC_id": signed_phc.get("id"),
+            "SCID": signed_phc.get("SCID"),
+            "APid": (pa_new.get("APA") or {}).get("APid"),
+        }
+        manifest["proof"] = {
+            "APA": (pa_new.get("APA") or {}).get("APproof"),
+            "APCH": (signed_phc.get("PROOF") or {}).get("APCH"),
+            "APCH_r": (signed_phc.get("PROOF") or {}).get("APCH_r"),
+        }
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        result["manifest"] = manifest
+    except (OSError, ValueError) as exc:
+        return {"success": False, "error": f"凭证已重签，但本机分身配置写入失败：{exc}", "PHC": signed_phc, "PA": result.get("PA")}
+
+    result["instance_id"] = instance_id
+    return result
+
 
 @app.post('/user/update_submit')
 def user_update_submit(req: RequestUpdateSubmit) -> Dict[str, Any]:
@@ -1386,6 +1613,8 @@ def user_update_submit(req: RequestUpdateSubmit) -> Dict[str, Any]:
         hid_use = hid_str if is_hex else sha256_hex(hid_str)
     except Exception:
         hid_use = sha256_hex(str(req.hid))
+    if (req.agent_type or "").strip().lower() == "openclaw":
+        return _openclaw_update_submit(req, ap_base_url, ap_dlog_pk, user_sk_int, user_pk_int, hid_use)
     # Compute code-based CMI for updated configuration
     try:
         import os, shutil

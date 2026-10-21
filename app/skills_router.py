@@ -174,6 +174,16 @@ RECOMMENDED_SKILLS = [
     {"slug": "desearch-web-search", "name": "联网搜索", "description": "Desearch 网络搜索", "recommended": True, "emoji": "🔍"},
 ]
 
+# clawhub 在 Windows 上可能经 cmd.exe 执行，Skill 标识与搜索词只允许安全字符。
+_SKILL_SLUG = re.compile(r"[A-Za-z0-9@][A-Za-z0-9@/._-]{0,119}")
+_SEARCH_KEYWORD = re.compile(r"[\w一-鿿 .-]{0,80}")
+
+
+def _require_slug(slug: str) -> str:
+    if not _SKILL_SLUG.fullmatch(str(slug or "")):
+        raise HTTPException(status_code=400, detail="Skill 标识只能包含字母、数字以及 @ / . _ -")
+    return slug
+
 
 def _run_capture(cmd: List[str], timeout: int = 30, cwd: str | None = None, env: dict | None = None) -> tuple[bool, str]:
     run_cmd = list(cmd)
@@ -533,6 +543,8 @@ async def install_clawhub():
 
 @router.get("/search")
 async def search_skills(keyword: str = ""):
+    if not _SEARCH_KEYWORD.fullmatch(keyword or ""):
+        raise HTTPException(status_code=400, detail="搜索词只能包含中英文、数字、空格以及 . _ -")
     clawhub_status = detect_clawhub()
     if not clawhub_status["ready"]:
         return {"success": False, "error": "ClawHub CLI 未安装", "clawhub": clawhub_status}
@@ -584,6 +596,7 @@ async def get_skill_chain_info(user_name: str):
 
 @router.post("/update-one")
 async def update_one_skill(request: SkillsSingleActionRequest):
+    _require_slug(request.skill_slug)
     instance_dir = Path(request.openclaw_path) if request.openclaw_path else get_openclaw_instance_path(request.user_name)
     if not instance_dir:
         raise HTTPException(status_code=404, detail=f"未找到 OpenClaw 实例: {request.user_name}")
@@ -593,6 +606,7 @@ async def update_one_skill(request: SkillsSingleActionRequest):
 
 @router.post("/uninstall-one")
 async def uninstall_one_skill(request: SkillsSingleActionRequest):
+    _require_slug(request.skill_slug)
     instance_dir = Path(request.openclaw_path) if request.openclaw_path else get_openclaw_instance_path(request.user_name)
     if not instance_dir:
         raise HTTPException(status_code=404, detail=f"未找到 OpenClaw 实例: {request.user_name}")
@@ -654,6 +668,8 @@ async def update_installed_skills(request: SkillsInstallRequest):
 
 @router.post("/install")
 async def install_skills(request: SkillsInstallRequest, background_tasks: BackgroundTasks):
+    for slug in request.selected_skills:
+        _require_slug(slug)
     clawhub_status = detect_clawhub()
     if not clawhub_status["ready"]:
         raise HTTPException(status_code=400, detail={"message": "ClawHub CLI 未安装", "clawhub": clawhub_status})
@@ -703,7 +719,8 @@ async def get_install_status(session_id: str):
     return {"success": True, **sessions[session_id]}
 
 
-async def _install_skills_task(session_id: str, instance_dir: Path, skills: List[str]):
+# 普通函数：BackgroundTasks 会放到线程池执行，安装期间不阻塞事件循环，前端可以持续轮询进度。
+def _install_skills_task(session_id: str, instance_dir: Path, skills: List[str]):
     sessions[session_id]["status"] = "installing"
     sessions[session_id]["message"] = "正在安装技能..."
     installed = []

@@ -1,7 +1,7 @@
 'use strict';
 (() => {
  const panel=document.createElement('section');panel.className='panel anp-panel';panel.hidden=true;
- panel.innerHTML='<div class="section-title"><div><h2>智能体通信协同 · 工作日志</h2><p class="muted">按时间记录智能体启动、协同请求与结果返回；不记录消息或问答内容。</p></div><button type="button" class="secondary" id="anp-refresh">刷新日志</button></div><p id="anp-status" role="status" aria-live="polite"></p><div id="anp-log" class="anp-log" role="log" aria-label="智能体协同工作日志" aria-live="polite"></div>';
+ panel.innerHTML='<div class="section-title"><div><h2 id="anp-title">智能体通信协同 · 工作日志</h2><p class="muted" id="anp-desc">按时间记录智能体启动、协同请求与结果返回；不记录消息或问答内容。</p></div><button type="button" class="secondary" id="anp-refresh">刷新日志</button></div><p id="anp-status" role="status" aria-live="polite"></p><div id="anp-log" class="anp-log" role="log" aria-label="智能体协同工作日志" aria-live="polite"></div>';
  document.querySelector('#partner-detail').append(panel);
  let currentType='octopus',current='',version=0,loading=false,timer=null;
  const el=id=>panel.querySelector('#'+id);
@@ -37,7 +37,7 @@
   try{
    const data=await api(endpoint());if(v!==version)return;
    const events=data.activity||[];
-   el('anp-status').textContent=data.connected?'通信服务已连接，工作日志每 5 秒更新。':(data.message||'通信服务未连接；仍可查看已有工作日志。');
+   el('anp-status').textContent=currentType==='openclaw'?'OpenClaw 分身独立运行，不参与 Octopus 组内通信；工作日志每 5 秒更新。':data.connected?'通信服务已连接，工作日志每 5 秒更新。':(data.message||'通信服务未连接；仍可查看已有工作日志。');
    const log=el('anp-log'),scrollTop=log.scrollTop;log.replaceChildren();
    for(const item of events){
     const row=document.createElement('article');row.className='anp-log-entry';
@@ -48,21 +48,23 @@
     const stateLabel=document.createElement('span');stateLabel.className='anp-log-state';stateLabel.textContent=eventStatus(item);
     detail.append(title,meta);row.append(marker,detail,stateLabel);log.append(row);
    }
-   if(!events.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='暂无工作记录；智能体启动或开始协同时，事件会显示在这里。';log.append(empty);}
+   if(!events.length){const empty=document.createElement('p');empty.className='muted';empty.textContent=currentType==='openclaw'?'暂无工作记录；分身启动或停止时，事件会显示在这里。':'暂无工作记录；智能体启动或开始协同时，事件会显示在这里。';log.append(empty);}
    log.scrollTop=scrollTop;
   }catch(e){if(v===version)el('anp-status').textContent=e.message;}
   finally{if(v===version)loading=false;}
  }
  async function select(id,type=currentType){
-  currentType=type;current=id;version++;loading=false;
+  currentType=type==='openclaw'?'openclaw':'octopus';current=id;version++;loading=false;
   if(timer){clearInterval(timer);timer=null;}
-  panel.hidden=currentType!=='octopus';if(panel.hidden)return;
+  panel.hidden=!current;if(panel.hidden)return;
+  const claw=currentType==='openclaw';
+  el('anp-title').textContent=claw?'OpenClaw 分身 · 工作日志':'智能体通信协同 · 工作日志';
+  el('anp-desc').textContent=claw?'按时间记录分身的启动与停止；不记录对话或操作内容。':'按时间记录智能体启动、协同请求与结果返回；不记录消息或问答内容。';
+  el('anp-log').setAttribute('aria-label',claw?'OpenClaw 分身工作日志':'智能体协同工作日志');
   el('anp-status').textContent='正在读取工作日志…';el('anp-log').replaceChildren();
   await refresh();timer=setInterval(refresh,5000);
  }
  el('anp-refresh').onclick=refresh;
- window.addEventListener('runtime-selected',event=>select(event.detail.id,event.detail.agent_type||state.type));
+ window.addEventListener('runtime-selected',event=>select(event.detail.id,event.detail.agent_type||'octopus'));
  window.addEventListener('children-updated',()=>{if(current)select(current);});
- window.addEventListener('agent-record-ready',()=>{if(!current&&state.phc?.id)select(state.phc.id.replaceAll(':','_'));});
- if(state.phc?.id)select(state.phc.id.replaceAll(':','_'));
 })();

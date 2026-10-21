@@ -9,15 +9,7 @@ import os
 import threading
 import tempfile
 from pathlib import Path
-from agent_provider.openclaw.openclaw_package import (
-    build_openclaw_agent_files,
-    extract_llm_public_config,
-)
-from agent_provider.openclaw.openclaw_package import (
-    build_openclaw_agent_files,
-    extract_llm_public_config,
-    compute_openclaw_bound_cmi,
-)
+from agent_provider.openclaw.openclaw_package import extract_llm_public_config
 from crypto_lib import (
     elgamal_decrypt_bytes,
     elgamal_encrypt_bytes as tp_elg_encrypt_bytes,
@@ -63,6 +55,35 @@ def _detect_agent_type(cmc: List[List[Dict[str, Any]]]) -> str:
         return "openclaw"
 
     return "octopus"
+
+
+def _normalize_agent_type(value: Any) -> str | None:
+    agent_type = str(value or "").strip().lower()
+    return agent_type if agent_type in {"octopus", "openclaw"} else None
+
+
+def _ap_record_key(hid: str, agent_type: str | None) -> str:
+    """One AP record per identity and agent type; Octopus keeps the original key."""
+    return f"{hid}_openclaw" if agent_type == "openclaw" else hid
+
+
+def _apdb_get_for(hid: str, agent_type: str | None) -> Dict[str, Any] | None:
+    record = _apdb_get(_ap_record_key(hid, agent_type))
+    if record or agent_type != "openclaw":
+        return record
+    # Records created before the split stored OpenClaw under the plain HID.
+    legacy = _apdb_get(hid)
+    return legacy if legacy and legacy.get("agent_type") == "openclaw" else None
+
+
+def _openclaw_llm_apm(llm_public_config: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "provider": llm_public_config.get("provider"),
+        "model": llm_public_config.get("model"),
+        "base_url_hash": sha256_hex(llm_public_config.get("base_url") or ""),
+        "compatibility": llm_public_config.get("compatibility"),
+        "config_hash": sha256_hex(canonical_json(llm_public_config)),
+    }
 
 router = APIRouter()
 log = logging.getLogger("ap")
@@ -257,13 +278,7 @@ def cmm_submit(payload: CMMSubmitRequest) -> Dict[str, Any]:
         }
 
         if agent_type == "openclaw":
-            apm_prime["LLM"] = {
-                "provider": llm_public_config.get("provider"),
-                "model": llm_public_config.get("model"),
-                "base_url_hash": sha256_hex(llm_public_config.get("base_url") or ""),
-                "compatibility": llm_public_config.get("compatibility"),
-                "config_hash": sha256_hex(canonical_json(llm_public_config)),
-            }
+            apm_prime["LLM"] = _openclaw_llm_apm(llm_public_config)
         apid = str(AP_PK)
         sig = schnorr_sign(AP_SK, canonical_json({"APM": apm_prime, "APid": apid}).encode())
         apa = {"APid": apid, "APproof": {"r": str(sig["r"]), "e": str(sig["e"]), "s": str(sig["s"])}}
@@ -327,7 +342,7 @@ def cmm_submit(payload: CMMSubmitRequest) -> Dict[str, Any]:
             phc_mod.setdefault("ASO", {}).setdefault("HASH_CHAIN", chain)
         except Exception:
             chain = {"head": None, "entries": []}
-        _apdb_put(hid, {
+        _apdb_put(_ap_record_key(hid, agent_type), {
             "phc_id": phc_mod.get("id"),
             "PHC": phc_mod,
             "agent_type": agent_type,
@@ -336,56 +351,8 @@ def cmm_submit(payload: CMMSubmitRequest) -> Dict[str, Any]:
             "r_bind2": str(rb2),
             "ts": datetime.utcnow().isoformat() + "Z",
         })
-        # ========== 生成 OpenClaw agent 配置文件 ==========
-        if agent_type == "openclaw":
-            # 从 cmc 中提取 hooks_config 和 skills_config
-            extracted_hooks = {}
-            extracted_skills = []
-
-            # cmc 应该是 8 行矩阵
-            if len(cmc) > 3:
-                for item in cmc[3]:
-                    label = item.get("label", "")
-                    if label.startswith("hook-"):
-                        hook_type = label.replace("hook-", "")
-                        # 映射到 openclawHooksSelected 的键名
-                        mapping = {
-                            "session-memory": "session_memory",
-                            "command-logger": "command_logger",
-                            "bootstrap-extra-files": "bootstrap_extra_files",
-                            "boot-md": "boot_md"
-                        }
-                        field = mapping.get(hook_type)
-                        if field:
-                            extracted_hooks[field] = True
-
-            if len(cmc) > 4:
-                for item in cmc[4]:
-                    skill_slug = item.get("params", {}).get("skill_slug")
-                    if skill_slug:
-                        extracted_skills.append(skill_slug)
-
-            # 如果前端没有传递 hooks_config/skills_config，使用提取的值；否则合并
-            final_hooks_config = hooks_config if hooks_config is not None else extracted_hooks
-            final_skills_config = skills_config if skills_config is not None else extracted_skills
-
-            try:
-                phc_id_raw = phc_mod.get("id") or f"agent_{hid}"
-                phc_id = str(phc_id_raw).replace(":", "_")
-                agent_root = os.path.join(os.getcwd(), "local_store", "agents", phc_id)
-                agent_files_result = build_openclaw_agent_files(
-                    root=agent_root,
-                    phc=phc_mod,
-                    pa=pa,
-                    cmc=cmc,
-                    hid=hid,
-                    package_cmi=str(cmi_int),
-                    hooks_config=final_hooks_config,
-                    skills_config=final_skills_config
-                )
-                print(f"[INFO] OpenClaw agent files generated at: {agent_files_result['package_dir']}")
-            except Exception as e:
-                print(f"[ERROR] Failed to generate OpenClaw agent files: {e}")
+        # The OpenClaw package is built by the user service in its own instance
+        # directory; building it here would overwrite the Octopus instance.
         enc = _encrypt_to_user(upub, {
             "agent_type": agent_type,
             "r_bind2": str(rb2),
@@ -428,7 +395,7 @@ def recover_pa(payload: RecoverInbound) -> Dict[str, Any]:
             tp_pk = int(str(tpa.get("TPid") or 0))
         except Exception:
             tp_pk = TP_DL_PK
-        rec = _apdb_get(hid)
+        rec = _apdb_get_for(hid, _normalize_agent_type(obj.get("agent_type")))
         if not rec:
             return {"success": False, "error": "not_found"}
         if str(rec.get("phc_id") or (rec.get("PHC") or {}).get("id")) != str(phc.get("id")):
@@ -452,6 +419,8 @@ def recover_pa(payload: RecoverInbound) -> Dict[str, Any]:
             r2 = 0
         af_calc = str(compute_af_formal(str(hid), AP_PK, tp_pk or TP_DL_PK, int(cmi_calc) % DL_Q, crf_int, r2))
         apm_prime = {"CMI": str(cmi_calc), "Time": datetime.utcnow().isoformat() + "Z"}
+        if agent_type == "openclaw":
+            apm_prime["LLM"] = _openclaw_llm_apm(extract_llm_public_config(cmc))
         apid = str(AP_PK)
         sig = schnorr_sign(AP_SK, canonical_json({"APM": apm_prime, "APid": apid}).encode())
         apa_out = {"APid": apid, "APproof": {"r": str(sig["r"]), "e": str(sig["e"]), "s": str(sig["s"])}}
@@ -971,6 +940,7 @@ def _compute_hash_chain(hid: str, cmc: List[List[Dict[str, Any]]]) -> Dict[str, 
 class UpdateInitRequest(BaseModel):
     ar: Dict[str, Any]
     user_pub: int
+    agent_type: Optional[str] = None
 
 class UpdateSubmitRequest(BaseModel):
     cmc_enc: Dict[str, Any]
@@ -988,8 +958,9 @@ def update_init(payload: UpdateInitRequest) -> Dict[str, Any]:
     crf = obj.get("CRF")
     if not isinstance(phc, dict) or not isinstance(hid, str):
         raise HTTPException(status_code=400, detail="invalid_payload")
-    cmm = _build_cmm_matrix(hid, phc)
-    return {"success": True, "cmm_enc": _encrypt_to_user(payload.user_pub, {"CMM": cmm, "CRF": crf})}
+    agent_type = _normalize_agent_type(obj.get("agent_type")) or _normalize_agent_type(payload.agent_type) or "octopus"
+    cmm = _build_cmm_matrix(hid, phc, agent_type=agent_type)
+    return {"success": True, "cmm_enc": _encrypt_to_user(payload.user_pub, {"CMM": cmm, "CRF": crf, "agent_type": agent_type})}
 
 @router.post("/ap/update_submit")
 def update_submit(payload: UpdateSubmitRequest) -> Dict[str, Any]:
@@ -1017,8 +988,10 @@ def update_submit(payload: UpdateSubmitRequest) -> Dict[str, Any]:
             cmi_int = int(str(cmi_code_str)) if cmi_code_str is not None else hcgen_cmi(cmc, hid)
         except Exception:
             cmi_int = hcgen_cmi(cmc, hid)
-        agent_type = _detect_agent_type(cmc)
+        agent_type = _normalize_agent_type(obj.get("agent_type")) or _detect_agent_type(cmc)
         apm_prime = {"CMI": str(cmi_int), "Time": datetime.utcnow().isoformat() + "Z"}
+        if agent_type == "openclaw":
+            apm_prime["LLM"] = _openclaw_llm_apm(obj.get("llm_public_config") or extract_llm_public_config(cmc))
         apid = str(AP_PK)
         sig = schnorr_sign(AP_SK, canonical_json({"APM": apm_prime, "APid": apid}).encode())
         apa = {"APid": apid, "APproof": {"r": str(sig["r"]), "e": str(sig["e"]), "s": str(sig["s"])}}
@@ -1077,7 +1050,7 @@ def update_submit(payload: UpdateSubmitRequest) -> Dict[str, Any]:
         except Exception:
             chain = {"head": None, "entries": []}
         try:
-            _apdb_put(hid, {
+            _apdb_put(_ap_record_key(hid, agent_type), {
                 "phc_id": phc_mod.get("id"),
                 "PHC": phc_mod,
                 "agent_type": agent_type,

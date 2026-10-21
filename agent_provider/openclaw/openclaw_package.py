@@ -951,7 +951,14 @@ def _write_openclaw_env_template(package_dir: str, llm_config: Dict[str, Any] | 
         )
 
         if not api_key:
-            raise ValueError(f"missing api_key for llm provider: {provider_key}")
+            # 不在生成阶段中断：部署时运行管理会沿用平台默认模型连接或使用页面填写的密钥。
+            return _write_text_file(path, f"""# Personal OpenClaw PA environment
+# Provider: {provider_cfg.get('name', provider_key)}
+# API key not configured; deployment uses the platform default model connection.
+OPENCLAW_MODEL={full_model}
+OPENAI_BASE_URL={base_url}
+LLM_PROVIDER={provider_key}
+""")
 
         content = f"""# Personal OpenClaw PA environment
 # Provider: {provider_cfg.get('name', provider_key)}

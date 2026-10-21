@@ -1,0 +1,43 @@
+/* 「我的分身」类型切换与 OpenClaw 分身申领，沿用工作台现有配色与圆角。 */
+.avatar-tabs{display:inline-flex;gap:6px;padding:5px;margin:0 0 22px;background:#eef2e9;border:1px solid var(--line);border-radius:14px}
+.avatar-tabs button{padding:10px 20px;border-radius:10px;background:none;color:#61736a;font-size:14px;font-weight:500}
+.avatar-tabs button[aria-selected=true]{background:#fff;color:var(--green);font-weight:600;box-shadow:0 3px 12px #395a4712}
+.claw-intro{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;border-radius:22px;background:linear-gradient(135deg,#f4f7ef,#fff 70%)}
+.claw-intro h2{font-size:24px;margin:14px 0 10px}
+.claw-intro p{color:#61736a}
+.claw-intro ul{margin:14px 0 0;padding-left:18px;color:#61736a;font-size:13px;line-height:1.9}
+.claw-intro-status{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px;background:#fff;border:1px solid var(--line);border-radius:18px}
+.claw-intro-status h3{margin:14px 0 6px}
+.claw-intro-status .primary{margin-top:10px}
+#page-claw .heading>.secondary{flex-shrink:0}
+.claw-env{display:grid;gap:10px;margin-top:14px}
+.claw-env-row{display:flex;align-items:center;gap:14px;padding:13px 16px;border:1px solid var(--line);border-radius:10px;background:#f8faf6}
+.claw-env-row>div{flex:1;min-width:0}
+.claw-env-row strong,.claw-env-row small{display:block;overflow-wrap:anywhere}
+.claw-env-row small{color:var(--muted)}
+.claw-env-badge{padding:3px 10px;border-radius:20px;background:#fff0e5;color:#945634;font-size:11px;white-space:nowrap}
+.claw-env-row[data-ready=true] .claw-env-badge{background:#dcefe0;color:#276345}
+.claw-env>.secondary{justify-self:start}
+.claw-note{margin:14px 0 0;font-size:12px;color:#61736a;overflow-wrap:anywhere}
+.claw-note a{margin-left:4px}
+#claw-load{margin-top:4px}
+#claw-confirm{margin-top:20px}
+#claw-progress{margin-top:16px}
+.claw-capability-row{display:grid;grid-template-columns:100px minmax(0,1fr);column-gap:24px;align-items:start;padding:18px 0}
+.claw-capability-row>strong{padding-top:12px}
+.claw-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.capability-row .claw-option{display:flex;align-items:flex-start;gap:10px;margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#f4f7f0;cursor:pointer}
+.capability-row .claw-option input{margin-top:3px}
+.claw-option b,.claw-option small{display:block;overflow-wrap:anywhere}
+.claw-option b{font-size:13px;font-weight:600;color:var(--ink)}
+.claw-option small{margin-top:3px;color:var(--muted);font-size:11px;line-height:1.5}
+.claw-option:has(input:checked){background:#e7efe1;border-color:#aebfa9}
+.claw-option:has(input:disabled){cursor:default}
+.update-subtitle{margin:26px 0 4px;font-size:15px}
+.update-inline{display:flex;gap:10px;align-items:center;margin-top:12px}
+.update-inline input{margin:0;max-width:420px}
+.update-inline button{flex-shrink:0}
+#updates-skill-results{max-height:260px;overflow:auto;margin-top:12px}
+.update-skill-actions{display:flex;align-items:center;gap:8px}
+@media(max-width:800px){.claw-intro{grid-template-columns:1fr}.claw-capability-row{grid-template-columns:1fr;row-gap:10px}.claw-capability-row>strong{padding-top:0}}
+@media(max-width:600px){.avatar-tabs{display:flex}.avatar-tabs button{flex:1;padding:9px 8px;font-size:13px}.claw-env-row{flex-wrap:wrap}.update-inline{flex-wrap:wrap}.update-inline input{max-width:none}}

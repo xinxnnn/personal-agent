@@ -93,7 +93,7 @@ def request_pa_remote(base_url: str, phc: Dict[str, Any], user: UserInfo) -> Dic
             return json.loads(raw.decode())
 
 
-def request_pa_recover(base_url: str, phc: Dict[str, Any], user: UserInfo) -> Dict[str, Any]:
+def request_pa_recover(base_url: str, phc: Dict[str, Any], user: UserInfo, agent_type: str = "octopus") -> Dict[str, Any]:
     base_url = normalize_service_base_url(base_url)
     try:
         pub_resp = httpx.get(base_url.rstrip("/") + "/v1/ap/public_keys", timeout=10.0)
@@ -104,7 +104,7 @@ def request_pa_recover(base_url: str, phc: Dict[str, Any], user: UserInfo) -> Di
     sk_a, pk_a = dl_generate_user_keypair()
     hid = sha256_hex(user.pii.id_number)
     crf = (phc.get("CRF") if isinstance(phc, dict) else None) or ((phc.get("SCID") or {}).get("RF") if isinstance(phc.get("SCID"), dict) else 0)
-    ar_plain = {"PHC": phc, "HID": hid, "CRF": crf}
+    ar_plain = {"PHC": phc, "HID": hid, "CRF": crf, "agent_type": agent_type}
     ar = elgamal_encrypt_bytes(ap_dlog_pk, ar_plain)
     payload = {"ar": ar, "user_pub": pk_a}
     url = base_url.rstrip("/") + "/v1/ap/recover_pa"

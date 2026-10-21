@@ -1,10 +1,10 @@
 'use strict';
 (() => {
-  names.create='我的化身'; names.partners='我的智能体';
+  names.create='我的化身'; names.partners='我的分身';
   const nav=document.querySelector('nav');
   nav.prepend(nav.querySelector('[data-page="create"]'));
   nav.querySelector('[data-page="create"] .nav-text').textContent='我的化身';
-  nav.querySelector('[data-page="partners"] .nav-text').textContent='我的智能体';
+  nav.querySelector('[data-page="partners"] .nav-text').textContent='我的分身';
   $('#page-create h1').textContent='先申领你的化身';
   $('#scenario-note').textContent='申领 Octopus 作为你的主智能体，创建不同分工的子智能体，通过系统内 ANP 交换信息。收到消息不代表自动执行任务。';
   $('#step1').textContent='01 申领资料'; $('#step2').textContent='02 化身能力'; $('#step3').textContent='03 完成申领';
@@ -18,9 +18,7 @@
   const next=document.createElement('button');next.className='primary';next.textContent='查看我的可信身份 →';next.type='button';next.onclick=()=>page('identity');
   $('#creation-result').after(next);
   const enter=$('#page-identity .identity-banner button');
-  $('#page-partners h1').textContent='我的智能体';
-  $('#page-partners .heading p:last-child').textContent='为化身申领不同分工的分身，通过对话一步步完成创建。';
-  $('#partners-create-shortcut').textContent='＋ 对话申领分身';$('#partners-add').textContent='＋ 对话申领分身';
+  $('#partners-create-shortcut').textContent='＋ 对话创建子智能体';$('#partners-add').textContent='＋ 对话创建子智能体';
   const setupBar=document.createElement('div');setupBar.className='setup-bar';
   setupBar.innerHTML='<b>智契化身 · 首次设置</b><div><button type="button" class="text-button" data-page="settings">连接设置</button><button type="button" class="text-button" id="setup-logout">退出账号</button></div>';
   document.querySelector('main').prepend(setupBar);
@@ -29,9 +27,6 @@
   const back=document.createElement('button');back.type='button';back.className='text-button';back.textContent='← 返回化身申领';back.onclick=()=>page('create');$('#page-settings').prepend(back);
   function update(){
     const ready=!!(state.avatarReady||state.created);
-    nav.querySelector('[data-page="partners"] .nav-text').textContent=state.type==='openclaw'?'独立实例':'我的智能体';
-    $('#page-partners h1').textContent=state.type==='openclaw'?'OpenClaw 独立实例':'我的智能体';
-    $('#page-partners .heading p:last-child').textContent=state.type==='openclaw'?'已绑定可信身份的独立工作助手，不支持创建子智能体。':'Octopus 负责问答与 ANP 通信；OpenClaw 执行分支负责在独立控制台完成工作。';
     document.body.classList.toggle('first-setup',!ready);setupBar.hidden=ready;back.hidden=ready;
     const current=state.pa?2:state.phc?1:0;
     panels.forEach((panel,index)=>panel.hidden=!ready&&index!==current);
@@ -47,7 +42,7 @@
   update();
 
   const dialog=document.querySelector('.child-create-dialog'),form=$('#child-form');
-  $('#child-create-title').textContent='添加问答智能体或执行分支';
+  $('#child-create-title').textContent='添加 Octopus 子智能体';
   const intro=dialog.querySelector('.section-title + p');if(intro)intro.textContent='告诉化身你需要怎样的伙伴。确认后沿用现有创建流程。';
   const conversation=document.createElement('div');conversation.className='panel';conversation.setAttribute('aria-live','polite');
   const prompt=document.createElement('p'),answer=document.createElement('input'),advance=document.createElement('button');

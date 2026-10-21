@@ -57,7 +57,16 @@ def agent_dir(agent_id):
     return path
 
 def package(path):
-    return path / ('openclaw_package' if (path / 'openclaw_package').is_dir() else 'octopus_build')
+    if not (path / 'openclaw_package').is_dir():
+        return path / 'octopus_build'
+    if not (path / 'octopus_build').is_dir():
+        return path / 'openclaw_package'
+    # Older AP builds wrote an OpenClaw package into Octopus instances; trust the manifest.
+    try:
+        kind = json.loads((path / 'agent_manifest.json').read_text(encoding='utf-8')).get('agent_type')
+    except (OSError, ValueError):
+        kind = None
+    return path / ('openclaw_package' if kind == 'openclaw' else 'octopus_build')
 
 def read_env(path):
     result = {}
